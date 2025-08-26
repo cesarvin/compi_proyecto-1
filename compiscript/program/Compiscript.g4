@@ -122,11 +122,16 @@ primaryExpr
   ;
 
 literalExpr
-  : Literal
+  : literal
   | arrayLiteral
   | 'null'
   | 'true'
   | 'false'
+  ;
+
+literal
+  : IntegerLiteral
+  | StringLiteral
   ;
 
 leftHandSide
@@ -160,10 +165,6 @@ baseType: 'boolean' | 'integer' | 'string' | Identifier;
 // Lexer Rules
 // ------------------
 
-Literal
-  : IntegerLiteral
-  | StringLiteral
-  ;
 
 IntegerLiteral: [0-9]+;
 StringLiteral: '"' (~["\r\n])* '"';

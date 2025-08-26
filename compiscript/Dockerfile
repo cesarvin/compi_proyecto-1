@@ -31,6 +31,7 @@ FROM ubuntu:latest
 # Install packages
 RUN apt-get update && apt-get install -y \
     curl \
+    nano \
     bash-completion \
     openjdk-17-jdk \
     fontconfig \
@@ -66,15 +67,15 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt --break-system-packages 
 
 # Set user
-ARG USER=appuser
-ARG UID=1001
-RUN adduser \
-    --disabled-password \
-    --gecos "" \
-    --home "$(pwd)" \
-    --no-create-home \
-    --uid "${UID}" \
-    "${USER}"
-USER ${UID}
+# ARG USER=appuser
+# ARG UID=1001
+# RUN adduser \
+#     --disabled-password \
+#     --gecos "" \
+#     --home "$(pwd)" \
+#     --no-create-home \
+#     --uid "${UID}" \
+#     "${USER}"
+# USER ${UID}
 
 WORKDIR /program
