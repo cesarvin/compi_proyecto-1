@@ -2,23 +2,17 @@ from visitor.CompiscriptParser import CompiscriptParser
 from visitor.CompiscriptVisitor import CompiscriptVisitor
 from recursos.custom_types import IntType, StringType, BoolType, ObjectType, ArrayType
 from recursos.error_handler import ErrorHandler
+from recursos.symbol_table import *
+from recursos.type_table import *
 
 class TypeCheckVisitor(CompiscriptVisitor):
 
-    def __init__(self, error_handler: ErrorHandler):
+    def __init__(self, error_handler: ErrorHandler, symbolTable: SymbolTable, typeTable: TypeTable):
 
         super().__init__()
-        # self.functionTable = FunctionTable()
-        # self.symbolTable = SymbolTable()
-        # self.typeTable = TypeTable()
-        # self.scope = Scope()
-        # self.c_class = None
-        # self.c_function = None
-        # self.c_functionId = 1
-        # self.c_scope = 1
-        # self.c_block = 1
-        # self.c_symbol = 0
         self.error_handler = error_handler
+        self.symbol_table = symbolTable
+        self.type_table = typeTable
 
     # Visit a parse tree produced by CompiscriptParser#program.
     def visitProgram(self, ctx:CompiscriptParser.ProgramContext):
@@ -37,12 +31,129 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#variableDeclaration.
     def visitVariableDeclaration(self, ctx:CompiscriptParser.VariableDeclarationContext):
-        return self.visitChildren(ctx)
+        
+        ctx_identifier = ctx.Identifier().getText()
+        
+        
+        if self.symbol_table.find_in_current_scope(ctx_identifier):
+            self.error_handler.add_error(
+                f"La variable '{ctx_identifier}' ya ha sido declarada en este ámbito.",
+                ctx.start.line,
+                ctx.start.column
+            )
+            return
+
+        annotated_type_obj = None
+        inferred_type_obj = None
+
+        if ctx.typeAnnotation():
+            type_name = ctx.typeAnnotation().type_().getText()
+            annotated_type_obj = self.type_table.find(type_name)
+            if not annotated_type_obj:
+                self.error_handler.add_error(
+                    f"El tipo '{type_name}' no está definido.",
+                    ctx.typeAnnotation().start.line,
+                    ctx.typeAnnotation().start.column
+                )
+                return
+
+        if ctx.initializer():
+            inferred_type_obj = self.visit(ctx.initializer().expression())
+            if not inferred_type_obj:
+                return
+
+        final_type_row = None
+        if annotated_type_obj and inferred_type_obj:
+            if annotated_type_obj.data_type != inferred_type_obj:
+                self.error_handler.add_error(
+                    f"No se puede asignar un valor de tipo '{inferred_type_obj}' a una variable de tipo '{annotated_type_obj.data_type}'.",
+                    ctx.initializer().start.line,
+                    ctx.initializer().start.column
+                )
+                return
+            final_type_row = annotated_type_obj
+        elif annotated_type_obj:
+            final_type_row = annotated_type_obj
+        elif inferred_type_obj:
+            final_type_row = self.type_table.find(str(inferred_type_obj))
+        else:
+            self.error_handler.add_error(
+                f"La variable '{ctx_identifier}' debe tener un tipo o un valor inicial.",
+                ctx.start.line,
+                ctx.start.column
+            )
+            return
+
+        if final_type_row:
+            scope_level = self.symbol_table.get_current_scope_level()
+            parent_level = scope_level - 1 if scope_level > 1 else 0
+
+            new_symbol = SymbolRow(
+                id=ctx_identifier,
+                data_type=str(final_type_row.data_type), 
+                size=final_type_row.size,
+                scope=scope_level,
+                parent_scope=parent_level,
+                is_param='Variable'
+            )
+            self.symbol_table.add(new_symbol)
 
 
     # Visit a parse tree produced by CompiscriptParser#constantDeclaration.
     def visitConstantDeclaration(self, ctx:CompiscriptParser.ConstantDeclarationContext):
-        return self.visitChildren(ctx)
+        ctx_identifier = ctx.Identifier().getText()
+
+        if self.symbol_table.find_in_current_scope(ctx_identifier):
+            self.error_handler.add_error(
+                f"El identificador '{ctx_identifier}' ya ha sido declarado en este ámbito.",
+                ctx.start.line,
+                ctx.start.column
+            )
+            return
+
+        annotated_type_obj = None
+        
+        if ctx.typeAnnotation():
+            type_name = ctx.typeAnnotation().type_().getText()
+            annotated_type_obj = self.type_table.find(type_name)
+            if not annotated_type_obj:
+                self.error_handler.add_error(
+                    f"El tipo '{type_name}' no está definido.",
+                    ctx.typeAnnotation().start.line,
+                    ctx.typeAnnotation().start.column
+                )
+                return
+
+        inferred_type_obj = self.visit(ctx.expression())
+        if not inferred_type_obj:
+            return # Error al evaluar la expresión
+
+        final_type_row = None
+        if annotated_type_obj:
+            if str(annotated_type_obj.data_type) != str(inferred_type_obj):
+                self.error_handler.add_error(
+                    f"No se puede asignar un valor de tipo '{inferred_type_obj}' a una constante de tipo '{annotated_type_obj.data_type}'.",
+                    ctx.expression().start.line,
+                    ctx.expression().start.column
+                )
+                return
+            final_type_row = annotated_type_obj
+        else:
+            final_type_row = self.type_table.find(str(inferred_type_obj))
+
+        if final_type_row:
+            scope_level = self.symbol_table.get_current_scope_level()
+            parent_level = scope_level - 1 if scope_level > 1 else 0
+
+            new_symbol = SymbolRow(
+                id=ctx_identifier,
+                data_type=str(final_type_row.data_type),
+                size=final_type_row.size,
+                scope=scope_level,
+                parent_scope=parent_level,
+                is_param='Constant'  # <-- ✨ Diferencia Clave
+            )
+            self.symbol_table.add(new_symbol)
 
 
     # Visit a parse tree produced by CompiscriptParser#typeAnnotation.

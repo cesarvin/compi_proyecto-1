@@ -5,6 +5,8 @@ from visitor.CompiscriptParser import CompiscriptParser
 from type_check_visitor import TypeCheckVisitor
 from antlr4.error.ErrorListener import ErrorListener
 from recursos.error_handler import ErrorHandler
+from recursos.symbol_table import SymbolTable
+from recursos.type_table import TypeTable
 
 class CollectingErrorListener(ErrorListener):
     def __init__(self):
@@ -64,7 +66,9 @@ def compilar(code = ""):
         tree = parser.program()  # We are using 'prog' since this is the starting rule based on our Compiscript grammar, yay!
 
         handler = ErrorHandler()
-        
+        type_table = TypeTable()
+        symbol_table = SymbolTable(type_table)
+
         #valida que no hayan errores sintacticos antes de continuar.
         if parser_listener.has_errors:
             
@@ -74,15 +78,16 @@ def compilar(code = ""):
                 handler.add_error(message, {err['line']}, {err['column']})
 
             return False, 'Errores lexicos', handler._errors
-        
-        visitor = TypeCheckVisitor(error_handler=handler)
-        
+
+        visitor = TypeCheckVisitor(error_handler=handler, symbolTable=symbol_table, typeTable=type_table)
+
         try:
             visitor.visit(tree)
 
             if handler.has_errors():
                 return False, 'Errores Semanticos', handler._errors
             
+            symbol_table.print_table()
             print("Type checking passed - paso")
             
         except TypeError as e:

@@ -1,10 +1,5 @@
-123;          // integer
-"texto";      // string
-true;         // boolean
-false;        // boolean
-null;         // nulo
-
-[];
-[1, 5, 9];
-
-[1, "hola", 3];
+let a: integer = 10;
+var b: string = "hola";
+let c: boolean = true;
+const PI: integer = 314;
+let d = null;

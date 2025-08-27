@@ -13,7 +13,7 @@ class IntType(Type):
     return isinstance(other, IntType)
   
   def __str__(self):
-    return "int"
+    return "integer"
 
 class FloatType(Type):
   def __eq__(self, other):
