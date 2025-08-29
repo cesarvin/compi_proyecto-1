@@ -37,3 +37,10 @@ for (let i: integer = 0; i < 3; i = i + 1) {
   let en_for:string; 
   en_for = "Loop index: "+ i;
 }
+
+let numeros: integer[];
+numeros = [1, 2, 3, 4, 5];  
+
+foreach (item in numeros) {
+  print(item);
+}

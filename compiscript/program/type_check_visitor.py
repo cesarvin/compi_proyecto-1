@@ -323,7 +323,51 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#foreachStatement.
     def visitForeachStatement(self, ctx:CompiscriptParser.ForeachStatementContext):
-        return self.visitChildren(ctx)
+        
+        ctx_expression = self.visit(ctx.expression())
+        ctx_line = ctx.expression().start.line
+        ctx_column = ctx.expression().start.column
+
+        if not isinstance(ctx_expression, ArrayType):
+            if not isinstance(ctx_expression, ErrorType):
+                message = f"Solo se puede iterar sobre arrays, no sobre el tipo '{ctx_expression}'."
+                self.error_handler.add_error(message, ctx_line, ctx_column)
+            
+            #aunque haya error se visita el bloque para encontrar errores
+            self.visit(ctx.block())
+            return None
+
+        self.symbol_table.enter_scope()
+
+        ctx_identifier = ctx.Identifier().getText()
+        
+        ctx_expression_type = ctx_expression.element_type 
+        
+        type_row = self.type_table.find(str(ctx_expression_type))
+        if not type_row:
+            message = f"Error interno: No se encontró el TypeRow para el tipo '{ctx_expression_type}'."
+            self.error_handler.add_error(message, ctx.start.line, ctx.start.column)
+            self.symbol_table.exit_scope() 
+            return None
+
+        scope_level = self.symbol_table.get_current_scope_level()
+        parent_level = scope_level - 1
+
+        new_symbol = SymbolRow(
+            id=ctx_identifier,
+            data_type=str(ctx_expression_type),
+            size=type_row.size,
+            scope=scope_level,
+            parent_scope=parent_level,
+            is_param='Variable'
+        )
+        self.symbol_table.add(new_symbol)
+
+        self.visit(ctx.block())
+
+        self.symbol_table.exit_scope()
+        
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#breakStatement.
