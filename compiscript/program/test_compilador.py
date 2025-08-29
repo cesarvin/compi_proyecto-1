@@ -11,7 +11,7 @@ class TestCompilador(unittest.TestCase):
         true; false;  // boolean
         null;         // nulo
         '''
-
+        
         input_stream = InputStream(codigo)
 
         compilado, msg ,errores = compilar(input_stream)
@@ -35,6 +35,104 @@ class TestCompilador(unittest.TestCase):
     def test_constantes(self):
         codigo = '''
         const PI: integer = 314;
+        '''
+        input_stream = InputStream(codigo)  
+
+        compilado, msg ,errores = compilar(input_stream)
+
+        self.assertEqual(compilado, True)
+
+    def test_asginacion_variables(self):
+        codigo = '''
+        let nombre: string;
+        nombre = "Compiscript";
+        
+        let edad: integer;
+        edad = 5;
+        
+        let esMujer: boolean;
+        esMujer = true;
+
+        let numeros: integer[];
+        numeros = [1, 2, 3, 4, 5];  
+
+        let colores: string[];
+        colores = ["rojo", "verde", "azul"];
+        '''
+        input_stream = InputStream(codigo)  
+
+        compilado, msg ,errores = compilar(input_stream)
+
+        self.assertEqual(compilado, True)
+
+    def test_asginacion_variables_error(self):
+        codigo = '''
+        let nombre: string;
+        nombre = 1;
+        
+        let edad: integer;
+        edad = "5";
+        
+        let esMujer: boolean;
+        esMujer = "true";
+
+        let numeros: integer[];
+        numeros = [1, "2", 3, 4, 5];  
+
+        let colores: string[];
+        colores = ["rojo", 0, "azul"];
+        '''
+        input_stream = InputStream(codigo)  
+
+        compilado, msg ,errores = compilar(input_stream)
+
+        self.assertEqual(compilado, False)
+
+    def test_operadores(self):
+        codigo = '''
+        let x:integer = 5 + 3 * 2;
+        let y: boolean = !(x < 10 || x > 20);
+
+        let a:integer = 10;
+        let b:integer = 20;
+        let c:integer = a + b * (a - b) / 2;
+        let d: boolean = (a == b) || (c != 15) && (a < 30);
+        let e: string = "hola" + "mundo";
+        '''
+        input_stream = InputStream(codigo)  
+
+        compilado, msg ,errores = compilar(input_stream)
+
+        self.assertEqual(compilado, True)
+    
+    def test_operadores_error(self):
+        codigo = '''
+        let x:integer = 5 + "3" * 2;
+        let y: boolean = !("x" < 10 || x > 20);
+
+        let a: integer = "diez";
+        let d: boolean = 2 || (c != 15) && (a < 30);
+        let c: string = "hola" + 5;
+        '''
+        input_stream = InputStream(codigo)  
+
+        compilado, msg ,errores = compilar(input_stream)
+
+        self.assertEqual(compilado, False)
+
+        
+    def test_bloques(self):
+        codigo = '''
+        let a: integer = 1;
+        let b: integer = 2;
+        let c: integer;
+
+        c = a+b;
+
+        {
+            let d:integer;
+            c = c+d;
+        }
         '''
         input_stream = InputStream(codigo)  
 

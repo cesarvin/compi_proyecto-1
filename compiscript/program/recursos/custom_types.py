@@ -34,7 +34,7 @@ class BoolType(Type):
       return isinstance(other, BoolType)
 
   def __str__(self):
-    return "bool"
+    return "boolean"
 
 class ArrayType(Type):
     def __init__(self, element_type):
@@ -47,3 +47,10 @@ class ArrayType(Type):
 
     def __str__(self):
         return f"Array<{self.element_type}>"  
+    
+class ErrorType(Type):
+	def __eq__(self, other):
+		return isinstance(other, ErrorType)
+	
+	def __str__(self):
+		return "error"

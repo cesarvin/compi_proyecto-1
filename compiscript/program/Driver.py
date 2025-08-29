@@ -35,15 +35,14 @@ def main(argv):
     compilado, msg ,errores = compilar(input_stream)
     
     if not compilado and msg == 'Errores lexicos':
-        print("❌ Se encontraron errores de sintaxis:")
+        print("\nSe encontraron errores de sintaxis:\n")
         for i, err in enumerate(errores, 1):
              print(f"  {i}. {err}")
     elif not compilado and msg == 'Errores Semanticos':
-         print("❌ Se encontraron errores de semántica:")
+         print("\nSe encontraron errores de semántica:\n")
          for i, err in enumerate(errores, 1):
              print(f"  {i}. {err}")
-    else: 
-         print("✅ Archivo correcto")
+    
 
 
 def compilar(code = ""):
@@ -88,10 +87,10 @@ def compilar(code = ""):
                 return False, 'Errores Semanticos', handler._errors
             
             symbol_table.print_table()
-            print("Type checking passed - paso")
+            print("Type checking passed")
             
         except TypeError as e:
-            print(f"Type checking error: {e}")
+            return False, f"Type checking error: {e}", handler._errors
 
         return True, 'Type checking passed', ''
         
@@ -104,5 +103,5 @@ if __name__ == '__main__':
     try:
         main(sys.argv)
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"Error: {e}")
         sys.exit(1)

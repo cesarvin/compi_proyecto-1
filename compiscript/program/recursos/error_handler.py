@@ -15,7 +15,7 @@ class ErrorHandler:
 
     def report_errors(self):
         if not self.has_errors():
-            print("Análisis completado sin errores")
+            print("No hay errores.")
             return
         
         for error in self._errors:

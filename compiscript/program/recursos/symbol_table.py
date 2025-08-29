@@ -11,11 +11,10 @@ class SymbolRow:
         self.p_function = p_function
         self.is_param = is_param
         
-    # def __str__(self):
-    #     return '{0} {1} {2} {3} {4} {5} {6} {7}'.format(self.id, self.data_type, self.size, self.scope, self.parent_scope, self.p_class, self.p_function, self.is_param)
     def __str__(self):
-        return (f"{str(self.id):<15} {str(self.data_type):<15} {str(self.size):<5} "
-                f"{str(self.scope):<5} {str(self.parent_scope):<10} {str(self.p_class):<10} "
+        return (f"{str(self.id):<15} {str(self.data_type):<15} "
+                f"{str(self.size):<5} {str(self.scope):<5} "
+                f"{str(self.parent_scope):<10} {str(self.p_class):<10} "
                 f"{str(self.p_function):<10} {str(self.is_param):<10}")
 
     def to_dict(self):
@@ -33,8 +32,8 @@ class SymbolRow:
    
 class SymbolTable:
     def __init__(self, type_table):
-        self.type_table = type_table  
-        self.scopes = [{}]  
+        self.type_table = type_table  # tabla de tipos
+        self.scopes = [{}]  # stack de ámbitos, cada ámbito es un diccionario
 
     def enter_scope(self):
         self.scopes.append({})
@@ -64,25 +63,28 @@ class SymbolTable:
         return current_scope.get(name)
 
     def print_table(self):
-        """
-        Imprime la tabla de símbolos completa, mostrando los diferentes ámbitos.
-        """
-        print("\n===== SYMBOL TABLE =====")
-        header = (f"{'ID':<15} {'TYPE':<15} {'SIZE':<5} "
-                  f"{'SCOPE':<5} {'PARENT_S':<10} {'CLASS':<10} "
-                  f"{'FUNCTION':<10} {'ROLE':<10}")
+        
+        print("\n" + "=" * 43 + " SYMBOL TABLE " + "=" * 43)
+        header = (f"{'ID':<15} "
+                  f"{'TYPE':<15} "
+                  f"{'SIZE':<5} "
+                  f"{'SCOPE':<5} "
+                  f"{'PARENT_S':<10} "
+                  f"{'CLASS':<10} "
+                  f"{'FUNCTION':<10} "
+                  f"{'ROLE':<10}")
+        
         print(header)
-        print("-" * 95)
+        print("-" * 100)
 
-        # Itera sobre cada ámbito (diccionario) en la pila de ámbitos
         for level, scope in enumerate(self.scopes, 1):
-            if not scope: # Si el ámbito está vacío, no imprimas nada para él
+            if not scope: 
                 continue
             
-            print(f"--- Ámbito Nivel {level} ---")
-            # Itera sobre cada símbolo (objeto SymbolRow) en el diccionario del ámbito actual
+            print(" " * 46 + f" Ámbito {level} " + " " * 46)
+            
             for symbol in scope.values():
-                # Python llama automáticamente a symbol.__str__()
                 print(symbol)
         
-        print("========================\n")
+        
+        print("\n" + "=" * 100 + "\n")

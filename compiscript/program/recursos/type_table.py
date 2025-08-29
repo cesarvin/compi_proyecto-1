@@ -25,8 +25,8 @@ class TypeTable:
             "boolean": TypeRow(BoolType(), 1, "Object"),
             "integer": TypeRow(IntType(), 8, "Object"),
             "float": TypeRow(FloatType(), 8, "Object"),
-            "string": TypeRow(StringType(), 0, "Object"),
-            "array": TypeRow(ArrayType(ObjectType()), 0, "ArrayObject")
+            "string": TypeRow(StringType(), 8, "Object"),
+            "array": TypeRow(ArrayType(ObjectType()), 8, "ArrayObject")
         }
         
         
@@ -42,5 +42,4 @@ class TypeTable:
         return self.entries.get(data_type)
     
     def to_dict(self):
-        #return [entry.to_dict() for entry in self.entries.values()]
         return {name: entry.to_dict() for name, entry in self.entries.items()}

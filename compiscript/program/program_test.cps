@@ -1,5 +1,10 @@
-let a: integer = 10;
-var b: string = "hola";
-let c: boolean = true;
-const PI: integer = 314;
-let d = null;
+let a: integer = 1;
+let b: integer = 2;
+let c: integer;
+
+c = a+b;
+
+{
+    let d:integer;
+    c = c+d;
+}
