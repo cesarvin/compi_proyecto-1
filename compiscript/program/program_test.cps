@@ -1,10 +1,19 @@
-let a: integer = 1;
-let b: integer = 2;
 let c: integer;
 
-c = a+b;
+c = 5+12;
 
-{
-    let d:integer;
-    c = c+d;
+if (c > 10) {
+    
+    let d: string; 
+
+    d = "dentro del if";
+
+    print(d); 
+} else {
+    let e: string; 
+    e = "dentro del else";
+    print("Menor o igual");
 }
+
+
+

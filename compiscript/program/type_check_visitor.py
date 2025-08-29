@@ -235,7 +235,22 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#ifStatement.
     def visitIfStatement(self, ctx:CompiscriptParser.IfStatementContext):
-        return self.visitChildren(ctx)
+        
+        ctx_expression = self.visit(ctx.expression())
+
+        if not isinstance(ctx_expression, BoolType):
+            if not isinstance(ctx_expression, ErrorType):
+                message = f"La condición de una sentencia 'if' debe ser de tipo 'boolean', no '{ctx_expression}'."
+                line = ctx.expression().start.line
+                column = ctx.expression().start.column
+                self.error_handler.add_error(message, line, column)
+
+        self.visit(ctx.block(0))
+
+        if len(ctx.block()) > 1:
+            self.visit(ctx.block(1))
+        
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#whileStatement.
