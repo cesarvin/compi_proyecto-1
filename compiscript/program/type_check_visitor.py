@@ -603,6 +603,12 @@ class TypeCheckVisitor(CompiscriptVisitor):
             elif op_token.text == '+' and isinstance(previous_type, StringType) and isinstance(right_type, StringType):
                 current_type = StringType()
 
+            elif op_token.text == '+' and isinstance(previous_type, StringType) and isinstance(right_type, IntType):
+                current_type = StringType()
+
+            elif op_token.text == '+' and isinstance(previous_type, IntType) and isinstance(right_type, StringType):
+                current_type = StringType()
+            
             else:
             # if current_type is None:
                 message = f"El operador '{op_token.text}' no se puede aplicar a operandos de tipos distintos: '{previous_type}' y '{right_type}'."
