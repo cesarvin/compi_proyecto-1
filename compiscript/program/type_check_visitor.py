@@ -779,28 +779,40 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#IdentifierExpr.
     def visitIdentifierExpr(self, ctx:CompiscriptParser.IdentifierExprContext):
-        identifier = ctx.getText()
+        ctx_identifier = ctx.getText()
     
-        symbol = self.symbol_table.find(identifier)
+        symbol = self.symbol_table.find(ctx_identifier)
         
         line = ctx.start.line
         column = ctx.start.column
         
         if not symbol:
-            message = f"La variable '{identifier}' no ha sido declarada."
+            message = f"La variable '{ctx_identifier}' no ha sido declarada."
             self.error_handler.add_error(message, line, column)
             return None
 
         symbol_type = symbol.data_type
-        
-        obj_type = self.type_table.find(symbol_type)
-        
-        if not obj_type:
-            message = f"Error interno: El tipo '{symbol_type}' del símbolo '{identifier}' no se encontró en la tabla de tipos."
-            self.error_handler.add_error(message, line, column)
-            return None
 
-        return obj_type.data_type
+        if symbol_type.startswith("Array<"):
+            symbol_array_type = symbol_type[6:-1]
+            
+            array_type = self.type_table.find(symbol_array_type)
+            if not array_type:
+                message = f"Error interno: El tipo base '{symbol_array_type}' del array '{ctx_identifier}' no existe."
+                self.error_handler.add_error(message, line, column)
+                return ErrorType()
+
+            return ArrayType(array_type.data_type)
+        
+        else:
+            obj_type = self.type_table.find(symbol_type)
+            
+            if not obj_type:
+                message = f"Error interno: El tipo '{symbol_type}' del símbolo '{ctx_identifier}' no se encontró en la tabla de tipos."
+                self.error_handler.add_error(message, line, column)
+                return None
+
+            return obj_type.data_type
 
 
     # Visit a parse tree produced by CompiscriptParser#NewExpr.
