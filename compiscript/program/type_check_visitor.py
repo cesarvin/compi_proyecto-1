@@ -13,6 +13,8 @@ class TypeCheckVisitor(CompiscriptVisitor):
         self.error_handler = error_handler
         self.symbol_table = symbolTable
         self.type_table = typeTable
+        self.loops_count = 0
+        self.switchs_count = 0
 
     # Visit a parse tree produced by CompiscriptParser#program.
     def visitProgram(self, ctx:CompiscriptParser.ProgramContext):
@@ -268,7 +270,9 @@ class TypeCheckVisitor(CompiscriptVisitor):
                 message = f"La condición de un ciclo 'while' debe ser de tipo 'boolean', no '{ctx_expression}'."
                 self.error_handler.add_error(message, ctx_line, ctx_column)
 
+        self.loops_count += 1
         self.visit(ctx.block())
+        self.loops_count -= 1
         
         return None
 
@@ -276,7 +280,9 @@ class TypeCheckVisitor(CompiscriptVisitor):
     # Visit a parse tree produced by CompiscriptParser#doWhileStatement.
     def visitDoWhileStatement(self, ctx:CompiscriptParser.DoWhileStatementContext):
         
+        self.loops_count += 1
         self.visit(ctx.block())
+        self.loops_count -= 1
 
         ctx_expression = self.visit(ctx.expression())
         ctx_line = ctx.expression().start.line  
@@ -314,7 +320,9 @@ class TypeCheckVisitor(CompiscriptVisitor):
         if ctx.expression(1):
             self.visit(ctx.expression(1))
 
+        self.loops_count += 1
         self.visit(ctx.block())
+        self.loops_count -= 1
 
         self.symbol_table.exit_scope()
         
@@ -363,7 +371,9 @@ class TypeCheckVisitor(CompiscriptVisitor):
         )
         self.symbol_table.add(new_symbol)
 
+        self.loops_count += 1
         self.visit(ctx.block())
+        self.loops_count -= 1
 
         self.symbol_table.exit_scope()
         
@@ -372,12 +382,18 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#breakStatement.
     def visitBreakStatement(self, ctx:CompiscriptParser.BreakStatementContext):
-        return self.visitChildren(ctx)
+        if self.loops_count == 0 and self.switchs_count == 0:
+            message = "La sentencia 'break' solo puede aparecer dentro de un ciclo o un switch."
+            self.error_handler.add_error(message, ctx.start.line, ctx.start.column)
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#continueStatement.
     def visitContinueStatement(self, ctx:CompiscriptParser.ContinueStatementContext):
-        return self.visitChildren(ctx)
+        if self.loops_count == 0:
+            message = "La sentencia 'continue' solo puede aparecer dentro de un ciclo."
+            self.error_handler.add_error(message, ctx.start.line, ctx.start.column)
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#returnStatement.
@@ -392,17 +408,44 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#switchStatement.
     def visitSwitchStatement(self, ctx:CompiscriptParser.SwitchStatementContext):
-        return self.visitChildren(ctx)
+        
+        ctx_expression = self.visit(ctx.expression())
+        
+        if isinstance(ctx_expression, ErrorType):
+            return 
+        
+        self.switchs_count += 1
+        for ctx_switchCase in ctx.switchCase():
+            self.visitSwitchCase(ctx_switchCase, ctx_expression)
+
+        if ctx.defaultCase():
+            self.visit(ctx.defaultCase())
+        self.switchs_count -= 1
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#switchCase.
-    def visitSwitchCase(self, ctx:CompiscriptParser.SwitchCaseContext):
-        return self.visitChildren(ctx)
+    def visitSwitchCase(self, ctx:CompiscriptParser.SwitchCaseContext, expected_type):
+        ctx_expression = self.visit(ctx.expression())
+        ctx_line = ctx.expression().start.line
+        ctx_column = ctx.expression().start.column
+
+        if isinstance(ctx_expression, ErrorType):
+            return
+            
+        if ctx_expression != expected_type:
+            message = f"El tipo del 'case' ({ctx_expression}) no coincide con el tipo de la expresión del 'switch' ({expected_type})."
+            self.error_handler.add_error(message, ctx_line, ctx_column)
+
+        for stmt_ctx in ctx.statement():
+            self.visit(stmt_ctx)
 
 
     # Visit a parse tree produced by CompiscriptParser#defaultCase.
     def visitDefaultCase(self, ctx:CompiscriptParser.DefaultCaseContext):
-        return self.visitChildren(ctx)
+        
+        for stmt_ctx in ctx.statement():
+            self.visit(stmt_ctx)
 
 
     # Visit a parse tree produced by CompiscriptParser#functionDeclaration.

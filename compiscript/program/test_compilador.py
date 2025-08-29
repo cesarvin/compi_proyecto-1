@@ -187,7 +187,17 @@ class TestCompilador(unittest.TestCase):
 
                 foreach (item in numeros) {
                 print(item);
-                }        
+                }
+
+                let xx: integer; 
+                switch (xx) {
+                case 1:
+                    print("uno");
+                case 2:
+                    print("dos");
+                default:
+                    print("otro");
+                }
         '''
         input_stream = InputStream(codigo)  
 
