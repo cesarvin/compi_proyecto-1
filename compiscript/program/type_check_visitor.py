@@ -403,8 +403,33 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#tryCatchStatement.
     def visitTryCatchStatement(self, ctx:CompiscriptParser.TryCatchStatementContext):
-        return self.visitChildren(ctx)
+        
+        self.visit(ctx.block(0))
 
+        self.symbol_table.enter_scope()
+
+        ctx_identifier = ctx.Identifier().getText()
+        exception_type = self.type_table.find("exception")
+        
+        scope_level = self.symbol_table.get_current_scope_level()
+        parent_level = scope_level - 1
+
+        exception_symbol = SymbolRow(
+            id=ctx_identifier,
+            data_type=str(exception_type.data_type),
+            size=exception_type.size,
+            scope=scope_level,
+            parent_scope=parent_level,
+            is_param='execption'
+        )
+        self.symbol_table.add(exception_symbol)
+
+        self.visit(ctx.block(1))
+
+        self.symbol_table.exit_scope()
+
+        return None
+        
 
     # Visit a parse tree produced by CompiscriptParser#switchStatement.
     def visitSwitchStatement(self, ctx:CompiscriptParser.SwitchStatementContext):
@@ -696,6 +721,11 @@ class TypeCheckVisitor(CompiscriptVisitor):
             elif op_token.text == '+' and isinstance(previous_type, IntType) and isinstance(right_type, StringType):
                 current_type = StringType()
             
+            elif op_token.text == '+' and isinstance(previous_type, ExceptionType) and isinstance(right_type, StringType):
+                current_type = StringType()
+            
+            elif op_token.text == '+' and isinstance(previous_type, StringType) and isinstance(right_type, ExceptionType):
+                current_type = StringType()
             else:
             # if current_type is None:
                 message = f"El operador '{op_token.text}' no se puede aplicar a operandos de tipos distintos: '{previous_type}' y '{right_type}'."
@@ -817,7 +847,37 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#leftHandSide.
     def visitLeftHandSide(self, ctx:CompiscriptParser.LeftHandSideContext):
-        return self.visitChildren(ctx)
+        
+        current_type = self.visit(ctx.primaryAtom())
+
+        for suffix in ctx.suffixOp():
+            if isinstance(current_type, ErrorType):
+                return ErrorType()
+
+            if suffix.expression(): 
+                if not isinstance(current_type, ArrayType):
+                    self.error_handler.add_error(f"Solo se puede acceder por índice a los arrays, no al tipo '{current_type}'.", suffix.start.line, suffix.start.column)
+                    return ErrorType()
+
+                
+                index_type = self.visit(suffix.expression())
+                if not isinstance(index_type, IntType):
+                    self.error_handler.add_error(f"El índice de un array debe ser de tipo 'integer', no '{index_type}'.", suffix.expression().start.line, suffix.expression().start.column)
+                    return ErrorType()
+                
+                
+                current_type = current_type.element_type
+            
+            # --- TODO:para funciones  ---
+            # elif suffix.arguments():
+                # ...
+
+            # --- TODO: para propiedades '.' (Futuro) ---
+            # elif suffix.Identifier():
+                # ...
+        
+        
+        return current_type
 
 
     # Visit a parse tree produced by CompiscriptParser#IdentifierExpr.
@@ -875,6 +935,29 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#IndexExpr.
     def visitIndexExpr(self, ctx:CompiscriptParser.IndexExprContext):
+        
+        # collection_type = self.visit(ctx.leftHandSide())
+        # ctx_start_line = ctx.start.line
+        # ctx_start_column = ctx.start.column
+
+        # if not isinstance(collection_type, ArrayType):
+        #     if not isinstance(collection_type, ErrorType):
+        #         message = f"Solo se puede acceder por índice a los arrays, no al tipo '{collection_type}'."
+        #         self.error_handler.add_error(message, ctx_start_line, ctx_start_column)
+        #     return ErrorType()
+
+        # index_type = self.visit(ctx.expression())
+
+        # ctx_start_line = ctx.expression().start.line
+        # ctx_start_column = ctx.expression().start.column
+
+        # if not isinstance(index_type, IntType):
+        #     if not isinstance(index_type, ErrorType):
+        #         message = f"El índice de un array debe ser de tipo 'integer', no '{index_type}'."
+        #         self.error_handler.add_error(message, ctx_start_line, ctx_start_column)
+        #     return ErrorType()
+            
+        # return collection_type.element_type
         return self.visitChildren(ctx)
 
 

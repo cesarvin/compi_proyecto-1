@@ -1,4 +1,4 @@
-from recursos.custom_types import Type, IntType, FloatType, StringType, BoolType, ObjectType, ArrayType
+from recursos.custom_types import Type, IntType, FloatType, StringType, BoolType, ObjectType, ArrayType, ExceptionType
 
 class TypeRow:
     def __init__(self, data_type, size, inherits= None, attributes = None):
@@ -26,7 +26,8 @@ class TypeTable:
             "integer": TypeRow(IntType(), 8, "Object"),
             "float": TypeRow(FloatType(), 8, "Object"),
             "string": TypeRow(StringType(), 8, "Object"),
-            "array": TypeRow(ArrayType(ObjectType()), 8, "ArrayObject")
+            "array": TypeRow(ArrayType(ObjectType()), 8, "ArrayObject"),
+            "exception": TypeRow(ExceptionType(), 8, "Object")
         }
         
         

@@ -198,6 +198,18 @@ class TestCompilador(unittest.TestCase):
                 default:
                     print("otro");
                 }
+
+                let numeros: integer[] = [1, 2, 3, 4, 5];  
+
+                foreach (n in numeros) { 
+                if (n == 3) {
+                    continue;
+                }
+                print("Number: " + n);
+                if (n > 4) {
+                    break;
+                }
+                }
         '''
         input_stream = InputStream(codigo)  
 

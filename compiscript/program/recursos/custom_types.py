@@ -54,3 +54,10 @@ class ErrorType(Type):
 	
 	def __str__(self):
 		return "error"
+
+class ExceptionType(Type):
+  def __eq__(self, other):
+    return isinstance(other, ExceptionType)
+  
+  def __str__(self):
+    return "exception"
