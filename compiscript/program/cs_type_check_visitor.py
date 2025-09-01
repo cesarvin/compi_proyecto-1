@@ -1,20 +1,24 @@
 from visitor.CompiscriptParser import CompiscriptParser
 from visitor.CompiscriptVisitor import CompiscriptVisitor
-from recursos.custom_types import IntType, StringType, BoolType, ObjectType, ArrayType, ErrorType
+from recursos.custom_types import *
 from recursos.error_handler import ErrorHandler
 from recursos.symbol_table import *
 from recursos.type_table import *
 
 class TypeCheckVisitor(CompiscriptVisitor):
 
-    def __init__(self, error_handler: ErrorHandler, symbolTable: SymbolTable, typeTable: TypeTable):
+    def __init__(self, error_handler: ErrorHandler, symbol_table: SymbolTable, type_table: TypeTable):
 
         super().__init__()
         self.error_handler = error_handler
-        self.symbol_table = symbolTable
-        self.type_table = typeTable
+        self.symbol_table = symbol_table
+        self.type_table = type_table
         self.loops_count = 0
         self.switchs_count = 0
+        self.current_function = None
+        self.current_class = None 
+        self.current_switch = []
+        self.control_switch_cases = []
 
     # Visit a parse tree produced by CompiscriptParser#program.
     def visitProgram(self, ctx:CompiscriptParser.ProgramContext):
@@ -33,7 +37,8 @@ class TypeCheckVisitor(CompiscriptVisitor):
         
         self.visitChildren(ctx)
         
-        self.symbol_table.print_table()
+        # self.symbol_table.print_table()
+        # print("#" * 100 + "\n")
         # al finalzar se elimina el ambito
         self.symbol_table.exit_scope()
 
@@ -41,61 +46,61 @@ class TypeCheckVisitor(CompiscriptVisitor):
     # Visit a parse tree produced by CompiscriptParser#variableDeclaration.
     def visitVariableDeclaration(self, ctx:CompiscriptParser.VariableDeclarationContext):
         
-        ctx_identifier = ctx.Identifier().getText()
-        ctx_line = ctx.start.line
-        ctx_column = ctx.start.column
+        ctx_variable = ctx.Identifier().getText()
+        ctx_line = ctx.start.line   
+        ctx_column = ctx.start.column   
         
-        if self.symbol_table.find_in_current_scope(ctx_identifier):
-            message = f"El identificador '{ctx_identifier}' ya ha sido declarado en este ámbito."
-            self.error_handler.add_error(message, ctx_line, ctx_column)
+        if self.symbol_table.find_in_current_scope(ctx_variable): 
+            message = f"La variable '{ctx_variable}' ya ha sido declarada en este ámbito"
+            self.error_handler.add_error(message, ctx_line, ctx_column) 
             return
 
         ctx_typeAnnotation = None
         if ctx.typeAnnotation():
             ctx_typeAnnotation = self.visit(ctx.typeAnnotation().type_())
             if isinstance(ctx_typeAnnotation, ErrorType):
-                return # se sale si no es valido el tipo anotado
+                return 
         
         type_expression = None
         if ctx.initializer():
-            type_expression = self.visit(ctx.initializer().expression())
+            type_expression = self.visit(ctx.initializer().expression()) 
             if isinstance(type_expression, ErrorType) or type_expression is None:
-                return # si la expresion tiene un error se sale
+                return 
 
-        data_type = None
-        if ctx_typeAnnotation and type_expression:
-            if ctx_typeAnnotation != type_expression:
-                empty_array = (isinstance(type_expression, ArrayType) and isinstance(type_expression.element_type, ObjectType))
+        tipo = None
+        if ctx_typeAnnotation and type_expression: 
+            if ctx_typeAnnotation != type_expression:   
+                empty_array = (isinstance(type_expression, ArrayType) and isinstance(type_expression.element_type, ObjectType))  
                 
                 if not (isinstance(ctx_typeAnnotation, ArrayType) and empty_array):
-                    message = f"No se puede asignar un valor de tipo '{type_expression}' a una variable de tipo '{ctx_typeAnnotation}'."
-                    line = ctx.initializer().start.line
-                    column = ctx.initializer().start.column
-                    self.error_handler.add_error(message, line, column)
+                    message = f"Se intenta asignar un tipo '{type_expression}' a una variable de tipo '{ctx_typeAnnotation}'"
+                    line = ctx.initializer().start.line  
+                    column = ctx.initializer().start.column 
+                    self.error_handler.add_error(message,  line, column)
                     return
             
-            data_type = ctx_typeAnnotation
+            tipo = ctx_typeAnnotation
         elif ctx_typeAnnotation:
-            data_type = ctx_typeAnnotation
+            tipo = ctx_typeAnnotation
         elif type_expression:
-            data_type = type_expression
+            tipo = type_expression
         else:
-            message = f"La variable '{ctx_identifier}' debe tener un tipo explícito o un valor inicial."
+            message = f"La variable '{ctx_variable}' debe tener un tipo explícito"
             line = ctx.start.line
             column = ctx.start.column
             self.error_handler.add_error(message, line, column)
             return
 
-        if data_type:
+        if tipo:
             type_name_for_lookup = ""
-            if isinstance(data_type, ArrayType):
+            if isinstance(tipo, ArrayType):
                 type_name_for_lookup = "array" 
             else:
-                type_name_for_lookup = str(data_type)
+                type_name_for_lookup = str(tipo)
 
             type_row = self.type_table.find(type_name_for_lookup)
             if not type_row:
-                message = f"Error interno: No se encontró el TypeRow para el tipo base '{type_name_for_lookup}'."
+                message = f"Error interno: No se encontró el TypeRow para el tipo base '{type_name_for_lookup}'"
                 line = ctx.start.line
                 column = ctx.start.column
                 self.error_handler.add_error(message, line, column)
@@ -104,72 +109,70 @@ class TypeCheckVisitor(CompiscriptVisitor):
             scope_level = self.symbol_table.get_current_scope_level()
             parent_level = scope_level - 1 if scope_level > 1 else 0
 
-            new_symbol = SymbolRow(
-                id=ctx_identifier,
-                data_type=str(data_type), 
+            new_symbol = VariableSymbol(
+                id=ctx_variable,
+                data_type=tipo, 
                 size=type_row.size, 
                 scope=scope_level,
                 parent_scope=parent_level,
-                is_param='Variable'
+                p_class = self.current_class,
+                p_function = self.current_function,
+                role='Variable'
             )
             self.symbol_table.add(new_symbol)
 
 
     # Visit a parse tree produced by CompiscriptParser#constantDeclaration.
     def visitConstantDeclaration(self, ctx:CompiscriptParser.ConstantDeclarationContext):
-        ctx_identifier = ctx.Identifier().getText()
-        ctx_line = ctx.start.line
-        ctx_column = ctx.start.column
-
-        if self.symbol_table.find_in_current_scope(ctx_identifier):
-            message = f"El identificador '{ctx_identifier}' ya ha sido declarado en este ámbito."
-            self.error_handler.add_error(message, ctx_line, ctx_column)
+        
+        ctx_constante = ctx.Identifier().getText()
+    
+        if self.symbol_table.find_in_current_scope(ctx_constante):
+            self.error_handler.add_error(f"El identificador '{ctx_constante}' ya ha sido declarada en este ámbito", ctx.start.line, ctx.start.column)
             return
 
-        type_annotation = None
-        
+        ctx_expresion_type = self.visit(ctx.expression())
+        if not ctx_expresion_type or isinstance(ctx_expresion_type, ErrorType):
+            return
+            
+        annotated_type = None
         if ctx.typeAnnotation():
-            ctx_typeAnnotation = ctx.typeAnnotation().type_().getText()
-            ctx_line = ctx.typeAnnotation().start.line
-            ctx_column = ctx.typeAnnotation().start.column
-            
-            type_annotation = self.type_table.find(ctx_typeAnnotation)
-            
-            if not type_annotation:
-                message = f"El tipo '{ctx_typeAnnotation}' no está definido."
-                self.error_handler.add_error(message, ctx_line, ctx_column)
+            annotated_type = self.visit(ctx.typeAnnotation().type_())
+            if isinstance(annotated_type, ErrorType):
                 return
 
-        expression_type = self.visit(ctx.expression())
-        ctx_line = ctx.expression().start.line
-        ctx_column = ctx.expression().start.column
-        
-        if not expression_type:
-            return # Error al evaluar la expresión
-
-        type_row = None
-        if type_annotation:
-            if str(type_annotation.data_type) != str(expression_type):
-                message = f"No se puede asignar un valor de tipo '{expression_type}' a una constante de tipo '{type_annotation.data_type}'."
-                self.error_handler.add_error(message, ctx_line, ctx_column)
+        final_type = None
+        if annotated_type:
+            if annotated_type != ctx_expresion_type:
+                self.error_handler.add_error(f"No se puede asignar un valor de tipo '{ctx_expresion_type}' a una constante de tipo '{annotated_type}'", ctx.expression().start.line, ctx.expression().start.column)
                 return
-            type_row = type_annotation
+            final_type = annotated_type
         else:
-            type_row = self.type_table.find(str(expression_type))
+            final_type = ctx_expresion_type
 
-        if type_row:
+        if final_type:
+            es_array = "array" if isinstance(final_type, ArrayType) else str(final_type)
+            type_row = self.type_table.find(es_array)
+
+            if not type_row:
+                self.error_handler.add_error(f"Error interno: No se encontró el TypeRow para el tipo '{final_type}'", ctx.start.line, ctx.start.column)
+                return
+
             scope_level = self.symbol_table.get_current_scope_level()
             parent_level = scope_level - 1 if scope_level > 1 else 0
 
-            new_symbol = SymbolRow(
-                id=ctx_identifier,
-                data_type=str(type_row.data_type),
+            new_symbol = VariableSymbol(
+                id=ctx_constante,
+                data_type=final_type,  
                 size=type_row.size,
                 scope=scope_level,
                 parent_scope=parent_level,
-                is_param='Constant' 
+                p_class = self.current_class,
+                p_function = self.current_function,
+                role='Constant'
             )
             self.symbol_table.add(new_symbol)
+        
 
 
     # Visit a parse tree produced by CompiscriptParser#typeAnnotation.
@@ -185,46 +188,63 @@ class TypeCheckVisitor(CompiscriptVisitor):
     # Visit a parse tree produced by CompiscriptParser#assignment.
     def visitAssignment(self, ctx:CompiscriptParser.AssignmentContext):
         
-        if ctx.Identifier():
-            ctx_identifier = ctx.Identifier().getText()
-            ctx_line = ctx.start.line
-            ctx_column = ctx.start.column
+        target_type = None
+        assigned_type = None
+        assigned_expression = None
 
-            symbol = self.symbol_table.find(ctx_identifier)
+        if ctx.getChild(1).getText() == '.':
+            instancia = self.visit(ctx.expression(0))
+            if not isinstance(instancia, ClassType):
+                message = f"El tipo '{instancia}' no corresponde a una instancia de clase."
+                self.error_handler.add_error(message, ctx.start.line, ctx.start.column)
+                return ErrorType()
+
+           
+            clase_type = self.type_table.find(str(instancia))
+            propiedad = ctx.Identifier().getText()
+
+            if not clase_type or propiedad not in clase_type.attributes:
+                message = f"El tipo '{instancia}' no tiene una propiedad llamada '{propiedad}'"
+                self.error_handler.add_error(message, ctx.Identifier().getSymbol().line, ctx.Identifier().getSymbol().column)
+                return ErrorType()
+            
+            target_type = clase_type.attributes[propiedad]
+
+            assigned_expression = ctx.expression(1)
+            assigned_type = self.visit(assigned_expression)
+
+        else:
+            variable = ctx.Identifier().getText()
+            symbol = self.symbol_table.find(variable)
 
             if not symbol:
-                message = f"Intento de asignar a una variable no declarada '{ctx_identifier}'."
-                self.error_handler.add_error(message, ctx_line, ctx_column)
-                return None
-
-            if symbol.is_param == 'Constant':
-                message = f"Intento de reasignar una constante '{ctx_identifier}'."
-                self.error_handler.add_error(message, ctx_line, ctx_column)
-                return None
-
-            expected_type = symbol.data_type
+                message = f"La variable '{variable}' no ha sido declarada."
+                self.error_handler.add_error(message, ctx.start.line, ctx.start.column)
+                return
             
-            expression_type = self.visit(ctx.expression(0))
-            ctx_line = ctx.expression(0).start.line
-            ctx_column = ctx.expression(0).start.column
-            
-            if not expression_type:
-                return None
-            
-            assigned_type_name = str(expression_type) 
+            if hasattr(symbol, 'role') and symbol.role == 'Constant':
+                message  = f"No se puede reasignar un valor a la constante '{variable}'"
+                self.error_handler.add_error(message, ctx.start.line, ctx.start.column)
+                return
 
-            if expected_type != assigned_type_name:
-                message = f"No se puede asignar un valor de tipo '{assigned_type_name}' a una variable de tipo '{expected_type}'."
-                self.error_handler.add_error(message, ctx_line, ctx_column)
-                return None
-                
-        # TODO asignación de propiedades objeto.prop = valor
-        # elif ctx.expression() and len(ctx.expression()) > 1:
-            # TODO...
+            target_type = symbol.data_type
+            assigned_expression = ctx.expression(0)
+            assigned_type = self.visit(assigned_expression)
 
-        # Una asignación no tiene un tipo, por lo que no devolvemos nada
+        if not assigned_type or isinstance(assigned_type, ErrorType):
+            return
+
+        if target_type != assigned_type:
+            is_generic_empty_array = (isinstance(assigned_type, ArrayType) and 
+                                    isinstance(assigned_type.element_type, ObjectType))
+            
+            if not (str(target_type).startswith("Array<") and is_generic_empty_array):
+                message = f"No se puede asignar un valor de tipo '{assigned_type}' a una variable de tipo '{target_type}'"
+                self.error_handler.add_error(message, assigned_expression.start.line, assigned_expression.start.column)
+
         return None
-
+        
+        
 
     # Visit a parse tree produced by CompiscriptParser#expressionStatement.
     def visitExpressionStatement(self, ctx:CompiscriptParser.ExpressionStatementContext):
@@ -247,7 +267,7 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
         if not isinstance(ctx_expression, BoolType):
             if not isinstance(ctx_expression, ErrorType):
-                message = f"La condición de una sentencia 'if' debe ser de tipo 'boolean', no '{ctx_expression}'."
+                message = f"La condición en la sentencia 'if' es '{ctx_expression}' y debe ser de tipo 'boolean'"
                 self.error_handler.add_error(message, ctx_line, ctx_column)
 
         self.visit(ctx.block(0))
@@ -267,7 +287,7 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
         if not isinstance(ctx_expression, BoolType):
             if not isinstance(ctx_expression, ErrorType):
-                message = f"La condición de un ciclo 'while' debe ser de tipo 'boolean', no '{ctx_expression}'."
+                message = f"La condición en el ciclo 'while' es '{ctx_expression}' y debe ser de tipo 'boolean'"
                 self.error_handler.add_error(message, ctx_line, ctx_column)
 
         self.loops_count += 1
@@ -290,7 +310,7 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
         if not isinstance(ctx_expression, BoolType):
             if not isinstance(ctx_expression, ErrorType):
-                message = f"La condición de un ciclo 'do-while' debe ser de tipo 'boolean', no '{ctx_expression}'."
+                message = f"La condición de el ciclo 'do-while' es '{ctx_expression}' y debe ser de tipo 'boolean'"
                 self.error_handler.add_error(message, ctx_line, ctx_column)
 
         return None
@@ -308,11 +328,12 @@ class TypeCheckVisitor(CompiscriptVisitor):
             self.visit(ctx.assignment())
         
         if ctx.expression(0):
-            condition_type = self.visit(ctx.expression(0))
-            if not isinstance(condition_type, BoolType):
-                if not isinstance(condition_type, ErrorType):
+            ctx_expresion_type = self.visit(ctx.expression(0))
+            if not isinstance(ctx_expresion_type, BoolType):
+                if not isinstance(ctx_expresion_type, ErrorType):
+                    message = f"La condición del ciclo 'for' es '{ctx_expresion_type}' y  debe ser de tipo 'boolean'"
                     self.error_handler.add_error(
-                        f"La condición de un ciclo 'for' debe ser de tipo 'boolean', no '{condition_type}'.",
+                        message,
                         ctx.expression(0).start.line,
                         ctx.expression(0).start.column
                     )
@@ -338,10 +359,9 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
         if not isinstance(ctx_expression, ArrayType):
             if not isinstance(ctx_expression, ErrorType):
-                message = f"Solo se puede iterar sobre arrays, no sobre el tipo '{ctx_expression}'."
+                message = f"El tipo a iterar es '{ctx_expression}' y solo se puede iterar sobre arrays"
                 self.error_handler.add_error(message, ctx_line, ctx_column)
             
-            #aunque haya error se visita el bloque para encontrar errores
             self.visit(ctx.block())
             return None
 
@@ -353,7 +373,7 @@ class TypeCheckVisitor(CompiscriptVisitor):
         
         type_row = self.type_table.find(str(ctx_expression_type))
         if not type_row:
-            message = f"Error interno: No se encontró el TypeRow para el tipo '{ctx_expression_type}'."
+            message = f"Error interno: No se encontró el TypeRow para el tipo '{ctx_expression_type}'"
             self.error_handler.add_error(message, ctx.start.line, ctx.start.column)
             self.symbol_table.exit_scope() 
             return None
@@ -361,13 +381,15 @@ class TypeCheckVisitor(CompiscriptVisitor):
         scope_level = self.symbol_table.get_current_scope_level()
         parent_level = scope_level - 1
 
-        new_symbol = SymbolRow(
+        new_symbol = VariableSymbol(
             id=ctx_identifier,
-            data_type=str(ctx_expression_type),
+            data_type=ctx_expression_type,
             size=type_row.size,
             scope=scope_level,
             parent_scope=parent_level,
-            is_param='Variable'
+            p_class = self.current_class,
+            p_function = self.current_function,
+            role='Variable'
         )
         self.symbol_table.add(new_symbol)
 
@@ -398,7 +420,31 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#returnStatement.
     def visitReturnStatement(self, ctx:CompiscriptParser.ReturnStatementContext):
-        return self.visitChildren(ctx)
+        
+
+        if self.current_function is None:
+            self.error_handler.add_error("La sentencia 'return' solo puede aparecer dentro de una función.", ctx.start.line, ctx.start.column)
+            return
+
+        returned_type_obj = self.visit(ctx.expression())
+        if not returned_type_obj or isinstance(returned_type_obj, ErrorType):
+            return
+
+        expected_type = None
+        func_info = self.current_function
+
+        if isinstance(func_info, FunctionSymbol):
+            expected_type = func_info.data_type.return_type
+        elif isinstance(func_info, FunctionType):
+            expected_type = func_info.return_type
+        else:
+            self.error_handler.add_error(f"Error interno: 'current_function' tiene un tipo desconocido.", ctx.start.line, ctx.start.column)
+            return
+
+        if str(returned_type_obj) != str(expected_type):
+            message = f"La función es de tipo '{expected_type}' y el retorno de tipo '{returned_type_obj}'"
+            self.error_handler.add_error(message, ctx.start.line,  ctx.start.column)
+        
 
 
     # Visit a parse tree produced by CompiscriptParser#tryCatchStatement.
@@ -414,13 +460,13 @@ class TypeCheckVisitor(CompiscriptVisitor):
         scope_level = self.symbol_table.get_current_scope_level()
         parent_level = scope_level - 1
 
-        exception_symbol = SymbolRow(
+        exception_symbol = VariableSymbol(
             id=ctx_identifier,
-            data_type=str(exception_type.data_type),
+            data_type=exception_type.data_type,
             size=exception_type.size,
             scope=scope_level,
             parent_scope=parent_level,
-            is_param='execption'
+            role='execption'
         )
         self.symbol_table.add(exception_symbol)
 
@@ -433,34 +479,49 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#switchStatement.
     def visitSwitchStatement(self, ctx:CompiscriptParser.SwitchStatementContext):
-        
         ctx_expression = self.visit(ctx.expression())
         
         if isinstance(ctx_expression, ErrorType):
             return 
-        
-        self.switchs_count += 1
-        for ctx_switchCase in ctx.switchCase():
-            self.visitSwitchCase(ctx_switchCase, ctx_expression)
 
+        self.switchs_count += 1
+        self.current_switch.append(ctx_expression)
+        self.control_switch_cases.append(set())
+
+        if ctx.switchCase():
+            for case in ctx.switchCase():
+                self.visit(case)
+        
         if ctx.defaultCase():
             self.visit(ctx.defaultCase())
+
+        self.control_switch_cases.pop()
+        self.current_switch.pop()
         self.switchs_count -= 1
         return None
+        
 
 
     # Visit a parse tree produced by CompiscriptParser#switchCase.
-    def visitSwitchCase(self, ctx:CompiscriptParser.SwitchCaseContext, expected_type):
-        ctx_expression = self.visit(ctx.expression())
-        ctx_line = ctx.expression().start.line
-        ctx_column = ctx.expression().start.column
+    def visitSwitchCase(self, ctx:CompiscriptParser.SwitchCaseContext):
+        
+        switch_type = self.current_switch[-1]
+        casos = self.control_switch_cases[-1]
 
-        if isinstance(ctx_expression, ErrorType):
-            return
-            
-        if ctx_expression != expected_type:
-            message = f"El tipo del 'case' ({ctx_expression}) no coincide con el tipo de la expresión del 'switch' ({expected_type})."
-            self.error_handler.add_error(message, ctx_line, ctx_column)
+        case_expr_type = self.visit(ctx.expression())
+        if isinstance(case_expr_type, ErrorType):
+            return 
+
+        if case_expr_type != switch_type:
+            message = f"El tipo del 'case' ({case_expr_type}) no coincide con el tipo de la expresión del 'switch' ({switch_type})."
+            self.error_handler.add_error(message, ctx.expression().start.line, ctx.expression().start.column)
+
+        case_value = ctx.expression().getText()
+        if case_value in casos:
+            message = f"Valor de 'case' duplicado: {case_value}."
+            self.error_handler.add_error(message, ctx.expression().start.line, ctx.expression().start.column)
+        else:
+            casos.add(case_value)
 
         for stmt_ctx in ctx.statement():
             self.visit(stmt_ctx)
@@ -475,8 +536,73 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#functionDeclaration.
     def visitFunctionDeclaration(self, ctx:CompiscriptParser.FunctionDeclarationContext):
-        return self.visitChildren(ctx)
+        funcion = ctx.Identifier().getText()
 
+        symbol = self.symbol_table.find_in_current_scope(funcion)
+
+        if not symbol:
+            params_types = []
+            if ctx.parameters():
+                for param_ctx in ctx.parameters().parameter():
+                    param_type = self.visit(param_ctx.type_())
+                    if isinstance(param_type, ErrorType): return
+                    params_types.append(param_type)
+
+            return_type = self.type_table.find("nil").data_type
+            if ctx.type_():
+                return_type = self.visit(ctx.type_())
+
+            func_type_obj = FunctionType(return_type, params_types)
+            
+            scope_level = self.symbol_table.get_current_scope_level()
+            parent_level = scope_level - 1 if scope_level > 1 else 0
+            
+            symbol = FunctionSymbol(
+                id=funcion,
+                function_type_obj=func_type_obj,
+                scope=scope_level,
+                parent_scope=parent_level
+            )
+            
+            if not self.symbol_table.add(symbol):
+                message = f"La función '{funcion}' ya fue declarada en este ámbito"
+                self.error_handler.add_error(message, ctx.start.line, ctx.start.column)
+                return
+
+        previous_function = self.current_function
+        self.current_function = symbol.data_type
+        
+        self.symbol_table.enter_scope()
+        
+        if ctx.parameters():
+            scope_level = self.symbol_table.get_current_scope_level()
+            parent_level = scope_level - 1
+
+            for i, param_ctx in enumerate(ctx.parameters().parameter()):
+                param_name = param_ctx.Identifier().getText()
+                param_type = symbol.data_type.param_types[i]
+                type_row = self.type_table.find(str(param_type))
+
+                param_symbol = VariableSymbol(
+                    id=param_name, data_type=param_type,
+                    size=type_row.size if type_row else 0,
+                    scope=scope_level, 
+                    parent_scope=parent_level, 
+                    p_class = self.current_class,
+                    p_function = funcion,
+                    role='Parameter'
+                )
+                self.symbol_table.add(param_symbol)
+
+        self.visit(ctx.block())
+        
+        self.symbol_table.exit_scope()
+        self.current_function = previous_function
+
+        return None
+
+        
+        
 
     # Visit a parse tree produced by CompiscriptParser#parameters.
     def visitParameters(self, ctx:CompiscriptParser.ParametersContext):
@@ -490,8 +616,44 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#classDeclaration.
     def visitClassDeclaration(self, ctx:CompiscriptParser.ClassDeclarationContext):
-        return self.visitChildren(ctx)
+        clase = ctx.Identifier(0).getText()
+        clase_typo = self.type_table.find(clase)
 
+        if not clase_typo:
+            return
+
+        previous_class = self.current_class
+        self.current_class = clase_typo.data_type
+
+        self.symbol_table.enter_scope()
+
+        scope_level = self.symbol_table.get_current_scope_level()
+        parent_level = scope_level - 1
+        
+        if clase_typo.attributes:
+            for name, member_type in clase_typo.attributes.items():
+                if isinstance(member_type, FunctionType):
+                    method_symbol = FunctionSymbol(
+                        id=name,
+                        function_type_obj=member_type,
+                        scope=scope_level,
+                        parent_scope=parent_level
+                    )
+                    self.symbol_table.add(method_symbol)
+
+        
+        for member in ctx.classMember():
+            if member.functionDeclaration(): 
+                self.visit(member)
+        
+        
+        self.symbol_table.exit_scope()
+        
+        self.current_class = previous_class
+        
+        return None
+        
+      
 
     # Visit a parse tree produced by CompiscriptParser#classMember.
     def visitClassMember(self, ctx:CompiscriptParser.ClassMemberContext):
@@ -506,34 +668,28 @@ class TypeCheckVisitor(CompiscriptVisitor):
     # Visit a parse tree produced by CompiscriptParser#AssignExpr.
     def visitAssignExpr(self, ctx:CompiscriptParser.AssignExprContext):
         
-        assignment_expr_type = self.visit(ctx.assignmentExpr())
-        ctx_line = ctx.assignmentExpr().start.line
-        ctx_column = ctx.assignmentExpr().start.column
-
-        var_name = ctx.lhs.getText()
-        ctx_lhs_line = ctx.lhs.start.line
-        ctx_lhs_column = ctx.lhs.start.column
-        symbol = self.symbol_table.find(var_name)
-        
-        if not symbol:
-            message = f"Intento de asignar a una variable no declarada '{var_name}'."
-            self.error_handler.add_error(message, ctx_lhs_line, ctx_lhs_column)
+        assigned_type = self.visit(ctx.assignmentExpr())
+        if not assigned_type or isinstance(assigned_type, ErrorType):
             return ErrorType()
 
-        if symbol.is_param == 'Constant':
-            message = f"No se puede reasignar un valor a la constante '{var_name}'."
-            self.error_handler.add_error(message, ctx_lhs_line, ctx_lhs_column)
+        target_type = self.visit(ctx.lhs)
+        if not target_type or isinstance(target_type, ErrorType):
             return ErrorType()
 
-        symbol_type_name = symbol.data_type
-        assigned_type_name = str(assignment_expr_type.data_type if isinstance(assignment_expr_type, TypeRow) else assignment_expr_type)
+        symbol = self.symbol_table.find(ctx.lhs.getText())
+        if symbol and hasattr(symbol, 'role') and symbol.role == 'Constant':
+            message = f"No se puede reasignar un valor a la constante '{symbol.id}'"
+            self.error_handler.add_error(message, ctx.lhs.start.line, ctx.lhs.start.column)
+            return ErrorType()
 
-        if symbol_type_name != assigned_type_name:
-            message = f"No se puede asignar un valor de tipo '{assigned_type_name}' a una variable de tipo '{symbol_type_name}'."
-            self.error_handler.add_error(message, ctx_line, ctx_column)
+        if target_type != assigned_type:
+            message = f"No se puede asignar un valor de tipo '{assigned_type}' a un destino de tipo '{target_type}'"
+            self.error_handler.add_error(message, ctx.assignmentExpr().start.line, ctx.assignmentExpr().start.column)
             return ErrorType()
             
-        return assignment_expr_type
+        return assigned_type
+        
+        
 
 
     # Visit a parse tree produced by CompiscriptParser#PropertyAssignExpr.
@@ -556,7 +712,7 @@ class TypeCheckVisitor(CompiscriptVisitor):
         
         if not isinstance(logical_or_expr_type, BoolType):
             if not isinstance(logical_or_expr_type, ErrorType):
-                message = f"La condición del operador ? debe ser de tipo 'boolean', no '{logical_or_expr_type}'."
+                message = f"La condición del operador ? debe ser de tipo 'boolean', se encontró '{logical_or_expr_type}'"
                 line = ctx.logicalOrExpr().start.line
                 column = ctx.logicalOrExpr().start.column
                 self.error_handler.add_error(message, line, column)
@@ -569,7 +725,7 @@ class TypeCheckVisitor(CompiscriptVisitor):
             return ErrorType()
             
         if true_out_type != false_out_type:
-            message = f"Las salidas del operador ? deben tener el mismo tipo, pero se encontraron '{true_out_type}' y '{false_out_type}'."
+            message = f"Las salidas del operador ? deben tener el mismo tipo, pero se encontraron '{true_out_type}' y '{false_out_type}'"
             line = ctx.expression(0).start.line
             column = ctx.expression(0).start.column
             self.error_handler.add_error(message, line, column)
@@ -580,15 +736,14 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#logicalOrExpr.
     def visitLogicalOrExpr(self, ctx:CompiscriptParser.LogicalOrExprContext):
-        
-        if len(ctx.children) == 1:
-            return self.visit(ctx.children[0])
+        operands = ctx.logicalAndExpr()
+        if len(operands) == 1:
+            return self.visit(operands[0])
 
-        left_type = self.visit(ctx.children[0])
-        right_type = self.visit(ctx.children[2])
+        left_type = self.visit(operands[0])
+        right_type = self.visit(operands[1])
         
-        op_node = ctx.children[1]
-        op_token = op_node.getSymbol()
+        op_token = ctx.getChild(1).getSymbol()
 
         if isinstance(left_type, BoolType) and isinstance(right_type, BoolType):
             return BoolType()
@@ -596,23 +751,22 @@ class TypeCheckVisitor(CompiscriptVisitor):
         if isinstance(left_type, ErrorType) or isinstance(right_type, ErrorType):
             return ErrorType()
 
-        message = f"El operador lógico '{op_token.text}' solo se puede aplicar a operandos de tipo 'boolean', no a '{left_type}' y '{right_type}'."
-        line = op_token.line
-        column = op_token.column
-        self.error_handler.add_error(message,line,column)
-        return ErrorType() 
+        message = f"El operador lógico '{op_token.text}' solo se aplica a operadores 'boolean', no entre '{left_type}' y '{right_type}'"
+        self.error_handler.add_error(message, op_token.line, op_token.column)
+        return ErrorType()
+        
 
 
     # Visit a parse tree produced by CompiscriptParser#logicalAndExpr.
     def visitLogicalAndExpr(self, ctx:CompiscriptParser.LogicalAndExprContext):
-        if len(ctx.children) == 1:
-            return self.visit(ctx.children[0])
+        operands = ctx.equalityExpr()
+        if len(operands) == 1:
+            return self.visit(operands[0])
 
-        left_type = self.visit(ctx.children[0])
-        right_type = self.visit(ctx.children[2])
+        left_type = self.visit(operands[0])
+        right_type = self.visit(operands[1])
         
-        op_node = ctx.children[1]
-        op_token = op_node.getSymbol()
+        op_token = ctx.getChild(1).getSymbol()
 
         if isinstance(left_type, BoolType) and isinstance(right_type, BoolType):
             return BoolType()
@@ -620,24 +774,22 @@ class TypeCheckVisitor(CompiscriptVisitor):
         if isinstance(left_type, ErrorType) or isinstance(right_type, ErrorType):
             return ErrorType()
 
-        message = f"El operador lógico '{op_token.text}' solo se puede aplicar a operandos de tipo 'boolean', no a '{left_type}' y '{right_type}'."
-        line = op_token.line
-        column = op_token.column
-        self.error_handler.add_error(message,line,column)
-        return ErrorType() 
+        message = f"El operador lógico '{op_token.text}' solo se aplica a operadores 'boolean', no entre '{left_type}' y '{right_type}'"
+        self.error_handler.add_error(message, op_token.line, op_token.column)
+        return ErrorType()
+        
 
 
     # Visit a parse tree produced by CompiscriptParser#equalityExpr.
     def visitEqualityExpr(self, ctx:CompiscriptParser.EqualityExprContext):
-        
-        if len(ctx.children) == 1:
-            return self.visit(ctx.children[0])
+        operands = ctx.relationalExpr()
+        if len(operands) == 1:
+            return self.visit(operands[0])
 
-        left_type = self.visit(ctx.children[0])
-        right_type = self.visit(ctx.children[2])
+        left_type = self.visit(operands[0])
+        right_type = self.visit(operands[1])
         
-        op_node = ctx.children[1]
-        op_token = op_node.getSymbol()
+        op_token = ctx.getChild(1).getSymbol()
 
         equalily_types = False
         
@@ -654,24 +806,22 @@ class TypeCheckVisitor(CompiscriptVisitor):
         if isinstance(left_type, ErrorType) or isinstance(right_type, ErrorType):
             return ErrorType()
 
-        message = f"No se puede realizar la comparación de igualdad '{op_token.text}' entre los tipos '{left_type}' y '{right_type}'."
-        line = op_token.line
-        column = op_token.column
-        self.error_handler.add_error(message, line, column)
-        return ErrorType() 
+        message = f"La comparación de igualdad '{op_token.text}' no se puede realizar entre '{left_type}' y '{right_type}'"
+        self.error_handler.add_error(message, op_token.line, op_token.column)
+        return ErrorType()
+        
 
 
     # Visit a parse tree produced by CompiscriptParser#relationalExpr.
     def visitRelationalExpr(self, ctx:CompiscriptParser.RelationalExprContext):
-        
-        if len(ctx.children) == 1:
-            return self.visit(ctx.children[0])
+        operands = ctx.additiveExpr()
+        if len(operands) == 1:
+            return self.visit(operands[0])
 
-        left_type = self.visit(ctx.children[0])
-        right_type = self.visit(ctx.children[2])
+        left_type = self.visit(operands[0])
+        right_type = self.visit(operands[1])
         
-        op_node = ctx.children[1]
-        op_token = op_node.getSymbol()
+        op_token = ctx.getChild(1).getSymbol()
 
         if isinstance(left_type, IntType) and isinstance(right_type, IntType):
             return BoolType()
@@ -679,11 +829,10 @@ class TypeCheckVisitor(CompiscriptVisitor):
         if isinstance(left_type, ErrorType) or isinstance(right_type, ErrorType):
             return ErrorType()
 
-        message = f"No se puede realizar la comparación '{op_token.text}' entre los tipos '{left_type}' y '{right_type}'."
-        line = op_token.line
-        column = op_token.column
-        self.error_handler.add_error(message, line, column)
+        message = f"Las comparaciones '{op_token.text}' no se pueden realizar entre '{left_type}' y '{right_type}'"
+        self.error_handler.add_error(message, op_token.line, op_token.column)
         return ErrorType()
+       
 
 
     # Visit a parse tree produced by CompiscriptParser#additiveExpr.
@@ -727,13 +876,13 @@ class TypeCheckVisitor(CompiscriptVisitor):
             elif op_token.text == '+' and isinstance(previous_type, StringType) and isinstance(right_type, ExceptionType):
                 current_type = StringType()
             else:
-            # if current_type is None:
-                message = f"El operador '{op_token.text}' no se puede aplicar a operandos de tipos distintos: '{previous_type}' y '{right_type}'."
+            
+                message = f"La operación '{op_token.text}' no se puede aplicar a operandos de distintos tipos: '{previous_type}' y '{right_type}'"
                 line = op_token.line
                 column = op_token.column
                 self.error_handler.add_error(message, line, column)
                 current_type = ErrorType()
-                # return None
+            
         
         return current_type
 
@@ -763,7 +912,7 @@ class TypeCheckVisitor(CompiscriptVisitor):
                 current_type = IntType()
             
             if current_type is None:
-                message = f"El operador '{op_token.text}' solo se puede aplicar a operandos de tipo 'integer', no a '{previous_type}' y '{right_type}'."
+                message = f"La operación '{op_token.text}' solo se puede aplicar a operandos de tipo 'integer' y se intentan operar '{previous_type}' y '{right_type}'"
                 line = op_token.line
                 column = op_token.column
                 self.error_handler.add_error(message, line, column)
@@ -780,7 +929,6 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
         unary_expr_type = self.visit(ctx.unaryExpr())
         
-        # Propagación de errores
         if isinstance(unary_expr_type, ErrorType):
             return ErrorType()
 
@@ -793,7 +941,7 @@ class TypeCheckVisitor(CompiscriptVisitor):
             if isinstance(unary_expr_type, IntType):
                 return IntType()
             else:
-                message = f"El operador de negación '-' solo se puede aplicar a operandos de tipo 'integer', no a '{unary_expr_type}'."
+                message = f"El operador de negación '-' solo se puede aplicar a operandos de tipo 'integer', no a '{unary_expr_type}'"
                 self.error_handler.add_error(message, line, column)
                 return ErrorType()
 
@@ -801,7 +949,7 @@ class TypeCheckVisitor(CompiscriptVisitor):
             if isinstance(unary_expr_type, BoolType):
                 return BoolType()
             else:
-                message = f"El operador lógico '!' solo se puede aplicar a operandos de tipo 'boolean', no a '{unary_expr_type}'."
+                message = f"El operador lógico '!' solo se puede aplicar a operandos de tipo 'boolean', no a '{unary_expr_type}'"
                 self.error_handler.add_error(message, line, column)
                 return ErrorType()
 
@@ -854,78 +1002,142 @@ class TypeCheckVisitor(CompiscriptVisitor):
             if isinstance(current_type, ErrorType):
                 return ErrorType()
 
-            if suffix.expression(): 
+            if isinstance(suffix, CompiscriptParser.IndexExprContext): 
                 if not isinstance(current_type, ArrayType):
-                    self.error_handler.add_error(f"Solo se puede acceder por índice a los arrays, no al tipo '{current_type}'.", suffix.start.line, suffix.start.column)
+                    message = f"Solo se puede acceder por índice a los arrays y no '{current_type}'"
+                    self.error_handler.add_error(message, suffix.start.line, suffix.start.column)
                     return ErrorType()
 
-                
                 index_type = self.visit(suffix.expression())
                 if not isinstance(index_type, IntType):
-                    self.error_handler.add_error(f"El índice de un array debe ser de tipo 'integer', no '{index_type}'.", suffix.expression().start.line, suffix.expression().start.column)
+                    message = f"El índice de un array debe ser de tipo 'integer' y no '{index_type}'"
+                    self.error_handler.add_error(message, suffix.expression().start.line, suffix.expression().start.column)
                     return ErrorType()
-                
                 
                 current_type = current_type.element_type
             
-            # --- TODO:para funciones  ---
-            # elif suffix.arguments():
-                # ...
+            elif isinstance(suffix, CompiscriptParser.CallExprContext):
+                if not isinstance(current_type, FunctionType):
+                    message = f"El tipo '{current_type}' no es una función y no se puede llamar"
+                    self.error_handler.add_error(message, suffix.start.line, suffix.start.column)
+                    return ErrorType()
+        
+                arg_expressions = []
+                if suffix.arguments():
+                    arg_expressions = suffix.arguments().expression()
+                
+                expected_param_count = len(current_type.param_types)
+                provided_arg_count = len(arg_expressions)
 
-            # --- TODO: para propiedades '.' (Futuro) ---
-            # elif suffix.Identifier():
-                # ...
-        
-        
+                if expected_param_count != provided_arg_count:
+                    message = f"La función esperaba {expected_param_count} argumentos, pero recibió {provided_arg_count}"
+                    self.error_handler.add_error(message, suffix.start.line, suffix.start.column)
+                    return ErrorType()
+
+                for i, arg_expr in enumerate(arg_expressions):
+                    arg_type = self.visit(arg_expr)
+                    expected_param_type = current_type.param_types[i]
+                    if arg_type != expected_param_type:
+                        if not isinstance(arg_type, ErrorType):
+                            message = f"El argumento {i+1} es de tipo incorrecto. Se esperaba '{expected_param_type}' pero se recibió '{arg_type}'"
+                            self.error_handler.add_error(message, arg_expr.start.line, arg_expr.start.column)
+                
+                current_type = current_type.return_type
+            
+            elif isinstance(suffix, CompiscriptParser.PropertyAccessExprContext):
+                if not isinstance(current_type, ClassType):
+                    message = f"Solo se puede acceder a propiedades en una instancia de clase, no en el tipo '{current_type}'"
+                    self.error_handler.add_error(message, suffix.start.line, suffix.start.column)
+                    return ErrorType()
+
+                clase = str(current_type)
+                class_type_row = self.type_table.find(clase)
+                prop_name = suffix.Identifier().getText()
+
+                if prop_name not in class_type_row.attributes:
+                    message = f"El tipo '{clase}' no tiene una propiedad llamada '{prop_name}'"
+                    self.error_handler.add_error(message, suffix.start.line, suffix.start.column)
+                    return ErrorType()
+                
+                current_type = class_type_row.attributes[prop_name]
+
         return current_type
 
 
     # Visit a parse tree produced by CompiscriptParser#IdentifierExpr.
     def visitIdentifierExpr(self, ctx:CompiscriptParser.IdentifierExprContext):
-        ctx_identifier = ctx.getText()
-    
-        symbol = self.symbol_table.find(ctx_identifier)
-        
-        line = ctx.start.line
-        column = ctx.start.column
+        identificador = ctx.getText()
+        symbol = self.symbol_table.find(identificador)
         
         if not symbol:
-            message = f"La variable '{ctx_identifier}' no ha sido declarada."
-            self.error_handler.add_error(message, line, column)
-            return None
+            message = f"La variable '{identificador}' no ha sido declarada."
+            self.error_handler.add_error(message, ctx.start.line, ctx.start.column)
+            return ErrorType()
 
-        symbol_type = symbol.data_type
-
-        if symbol_type.startswith("Array<"):
-            symbol_array_type = symbol_type[6:-1]
-            
-            array_type = self.type_table.find(symbol_array_type)
-            if not array_type:
-                message = f"Error interno: El tipo base '{symbol_array_type}' del array '{ctx_identifier}' no existe."
-                self.error_handler.add_error(message, line, column)
-                return ErrorType()
-
-            return ArrayType(array_type.data_type)
+        return symbol.data_type
         
-        else:
-            obj_type = self.type_table.find(symbol_type)
-            
-            if not obj_type:
-                message = f"Error interno: El tipo '{symbol_type}' del símbolo '{ctx_identifier}' no se encontró en la tabla de tipos."
-                self.error_handler.add_error(message, line, column)
-                return None
-
-            return obj_type.data_type
 
 
     # Visit a parse tree produced by CompiscriptParser#NewExpr.
     def visitNewExpr(self, ctx:CompiscriptParser.NewExprContext):
-        return self.visitChildren(ctx)
+        
+        clase = ctx.Identifier().getText()
+
+        type_row = self.type_table.find(clase)
+
+        if not type_row or not isinstance(type_row.data_type, ClassType):
+            message = f"El tipo '{clase}' nno se puede instanciar porque no es una clase"
+            self.error_handler.add_error(message,ctx.start.line, ctx.start.column)
+            return ErrorType()
+
+        constructor_signature = None
+
+        if "constructor" in type_row.attributes:
+            attr = type_row.attributes["constructor"]
+            if isinstance(attr, FunctionType):
+                constructor_signature = attr
+        
+        provided_arg_types = []
+        arg_expressions = []
+
+        if ctx.arguments():
+            arg_expressions = ctx.arguments().expression()
+            
+            for arg_expr in arg_expressions:
+                provided_arg_types.append(self.visit(arg_expr))
+
+        if constructor_signature:
+            
+            expected_param_types = constructor_signature.param_types
+
+            if len(expected_param_types) != len(provided_arg_types):
+            
+                message = f"El constructor de '{clase}' esperaba {len(expected_param_types)} argumentos y recibió {len(provided_arg_types)}"
+                self.error_handler.add_error(message,ctx.start.line, ctx.start.column)
+                return ErrorType()
+
+            for i, arg_type in enumerate(provided_arg_types):
+                expected_type = expected_param_types[i]
+            
+                if arg_type != expected_type and not isinstance(arg_type, ErrorType):
+                    message = f"El argumento {i+1} del constructor es de tipo incorrecto. Se esperaba '{expected_type}' pero se recibió '{arg_type}'"
+                    self.error_handler.add_error(message,arg_expressions[i].start.line, arg_expressions[i].start.column)
+        
+        elif len(provided_arg_types) > 0:
+            message = f"La clase '{clase}' no tiene un constructor definido. Se proporcionaron {len(provided_arg_types)} argumentos invalidos"
+            self.error_handler.add_error(message,ctx.start.line, ctx.start.column)
+            return ErrorType()
+             
+        return type_row.data_type
 
 
     # Visit a parse tree produced by CompiscriptParser#ThisExpr.
     def visitThisExpr(self, ctx:CompiscriptParser.ThisExprContext):
-        return self.visitChildren(ctx)
+        if self.current_class is None:
+            message = "La palabra clave 'this' solo puede aparecer dentro de una clase"
+            self.error_handler.add_error(message, ctx.start.line, ctx.start.column)
+            return ErrorType()
+        return self.current_class
 
 
     # Visit a parse tree produced by CompiscriptParser#CallExpr.
@@ -935,29 +1147,6 @@ class TypeCheckVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#IndexExpr.
     def visitIndexExpr(self, ctx:CompiscriptParser.IndexExprContext):
-        
-        # collection_type = self.visit(ctx.leftHandSide())
-        # ctx_start_line = ctx.start.line
-        # ctx_start_column = ctx.start.column
-
-        # if not isinstance(collection_type, ArrayType):
-        #     if not isinstance(collection_type, ErrorType):
-        #         message = f"Solo se puede acceder por índice a los arrays, no al tipo '{collection_type}'."
-        #         self.error_handler.add_error(message, ctx_start_line, ctx_start_column)
-        #     return ErrorType()
-
-        # index_type = self.visit(ctx.expression())
-
-        # ctx_start_line = ctx.expression().start.line
-        # ctx_start_column = ctx.expression().start.column
-
-        # if not isinstance(index_type, IntType):
-        #     if not isinstance(index_type, ErrorType):
-        #         message = f"El índice de un array debe ser de tipo 'integer', no '{index_type}'."
-        #         self.error_handler.add_error(message, ctx_start_line, ctx_start_column)
-        #     return ErrorType()
-            
-        # return collection_type.element_type
         return self.visitChildren(ctx)
 
 
@@ -986,7 +1175,7 @@ class TypeCheckVisitor(CompiscriptVisitor):
             if current_expression_type != first_expression_type:
                 line = ctx_expressions[i].start.line
                 column = ctx_expressions[i].start.column
-                message = f"No se pueden mezclar tipos en un array. Se esperaba '{first_expression_type}' pero se encontró '{current_expression_type}'."
+                message = f"No se pueden mezclar tipos en un array. Se esperaba '{first_expression_type}' y se encontró '{current_expression_type}'"
                 self.error_handler.add_error(message, line, column)
                 return None 
 
@@ -1000,7 +1189,7 @@ class TypeCheckVisitor(CompiscriptVisitor):
         base_type_row = self.type_table.find(base_type_name)
         
         if not base_type_row:
-            message = f"El tipo base '{base_type_name}' no está definido."
+            message = f"El tipo generico '{base_type_name}' no está definido"
             line = ctx.start.line
             column = ctx.start.column
             self.error_handler.add_error(message, line, column)

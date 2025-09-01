@@ -1,0 +1,10 @@
+services:
+  api_compilador:
+    image: csp-image
+    restart: always
+    volumes:
+      - ./program:/program
+    working_dir: /program
+    ports:
+      - "8000:8000"
+    command: ["python3", "app.py"]

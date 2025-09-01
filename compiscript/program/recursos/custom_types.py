@@ -49,11 +49,11 @@ class ArrayType(Type):
         return f"Array<{self.element_type}>"  
     
 class ErrorType(Type):
-	def __eq__(self, other):
-		return isinstance(other, ErrorType)
-	
-	def __str__(self):
-		return "error"
+    def __eq__(self, other):
+        return isinstance(other, ErrorType)
+
+    def __str__(self):
+        return "error"
 
 class ExceptionType(Type):
   def __eq__(self, other):
@@ -61,3 +61,34 @@ class ExceptionType(Type):
   
   def __str__(self):
     return "exception"
+
+class NilType(Type):
+  def __eq__(self, other):
+    return isinstance(other, NilType)
+  
+  def __str__(self):
+    return "nil"
+
+class FunctionType(Type):
+    def __init__(self, return_type, param_types):
+        self.return_type = return_type
+        self.param_types = param_types
+
+    def __eq__(self, other):
+        if not isinstance(other, FunctionType):
+            return False
+        return self.return_type == other.return_type and self.param_types == other.param_types
+
+    def __str__(self):
+        params = ", ".join(str(p) for p in self.param_types)
+        return f"({params}) -> {self.return_type}"
+
+class ClassType(Type):
+    def __init__(self, name):
+        self.name = name
+
+    def __eq__(self, other):
+        return isinstance(other, ClassType) and self.name == other.name
+  
+    def __str__(self):
+        return str(self.name)

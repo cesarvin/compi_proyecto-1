@@ -1,39 +1,65 @@
-class SymbolRow:
-    #def __init__(self, id, data_type, size = 0, offset = 0, scope = None, p_class = None, p_function = None, is_param = False):
-    def __init__(self, id, data_type, size = 0, scope = None, parent_scope = None, p_class = None, p_function = None, is_param = 'Parameter'):
+class Symbol:
+    def __init__(self, id, data_type, size=0, scope=None, parent_scope=None):
         self.id = id
         self.data_type = data_type
         self.size = size
-        #self.offset = offset
         self.scope = scope
         self.parent_scope = parent_scope
-        self.p_class = p_class
-        self.p_function = p_function
-        self.is_param = is_param
-        
-    def __str__(self):
-        return (f"{str(self.id):<15} {str(self.data_type):<15} "
-                f"{str(self.size):<5} {str(self.scope):<5} "
-                f"{str(self.parent_scope):<10} {str(self.p_class):<10} "
-                f"{str(self.p_function):<10} {str(self.is_param):<10}")
 
+    def __str__(self):
+        return f"{self.id:<15} {str(self.data_type):<15} {str(self.size):<5} {str(self.scope):<5}"
+    
     def to_dict(self):
         return {
             'id': self.id,
-            'data_type': self.data_type,
+            'data_type': str(self.data_type),
             'size': self.size,
             'scope': self.scope,
-            'parent_scope': self.parent_scope,
+            'parent_scope': self.parent_scope
+        }
+
+class VariableSymbol(Symbol):
+    def __init__(self, id, data_type, size=0, scope=None, parent_scope=None, p_class=None, p_function=None, role='Variable'):
+        super().__init__(id, data_type, size, scope, parent_scope)
+        self.p_class = p_class
+        self.p_function = p_function
+        self.role = role 
+
+    def __str__(self):
+        return (f"{str(self.id):<15} {str(self.data_type):<15} {str(self.size):<5} {str(self.scope):<5} "
+                f"{str(self.parent_scope):<10} {str(self.p_class):<10} {str(self.p_function):<10} {str(self.role):<10}")
+
+    def to_dict(self):
+        data = super().to_dict()
+        data.update({
             'p_class': self.p_class,
             'p_function': self.p_function,
-            'is_param': self.is_param
-        }
+            'role': self.role
+        })
+        return data
+
+class FunctionSymbol(Symbol):
+    def __init__(self, id, function_type_obj, scope, parent_scope, parameters=None):
+        super().__init__(id, function_type_obj, 0, scope, parent_scope)
+        self.parameters = parameters if parameters is not None else []
+        self.role = 'Function'
+
+    def __str__(self):
+        signature = str(self.data_type)
+        return (f"{str(self.id):<15} {signature:<25} {'-':<5} {str(self.scope):<5} {str(self.parent_scope):<10} {'-':<10} {'-':<10} {str(self.role):<10}")
+
+    def to_dict(self):
+        data = super().to_dict()
+        data.update({
+            'role': self.role,
+            'parameters': [p.to_dict() for p in self.parameters]
+        })
+        return data
 
    
 class SymbolTable:
-    def __init__(self, type_table):
-        self.type_table = type_table  # tabla de tipos
-        self.scopes = [{}]  # stack de ámbitos, cada ámbito es un diccionario
+    def __init__(self):
+        self.scopes = [{}]  
 
     def enter_scope(self):
         self.scopes.append({})
@@ -88,3 +114,10 @@ class SymbolTable:
         
         
         print("\n" + "=" * 100 + "\n")
+
+    def to_dict(self):
+        table_as_list = []
+        for scope in self.scopes:
+            scope_as_dict = {name: symbol.to_dict() for name, symbol in scope.items()}
+            table_as_list.append(scope_as_dict)
+        return table_as_list

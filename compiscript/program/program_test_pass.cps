@@ -1,10 +1,8 @@
-123;          // integer
-"texto";      // string
-true;         // boolean
-false;        // boolean
-null;         // nulo
+function saludar(nombre: string): string {
+  return "Hola, " + nombre + "!";
+}
 
-[];
-[1, 5, 9];
 
-[1, "hola", 3];
+let mensaje: string = saludar("Hola","Mundo");
+
+print(mensaje);

@@ -14,7 +14,7 @@ class TestCompilador(unittest.TestCase):
         
         input_stream = InputStream(codigo)
 
-        compilado, msg ,errores = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
 
         self.assertEqual(compilado, True)
 
@@ -28,7 +28,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, msg ,errores = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
 
         self.assertEqual(compilado, True)
     
@@ -38,9 +38,20 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, msg ,errores = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
 
         self.assertEqual(compilado, True)
+
+    def test_constantes_error(self):
+        codigo = '''
+            const PI: integer = 314;
+            PI = 31416;
+        '''
+        input_stream = InputStream(codigo)  
+
+        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+
+        self.assertEqual(compilado, False)
 
     def test_asginacion_variables(self):
         codigo = '''
@@ -61,21 +72,45 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, msg ,errores = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
 
         self.assertEqual(compilado, True)
 
-    def test_asginacion_variables_error(self):
+    def test_asginacion_variables_string_error(self):
         codigo = '''
             let nombre: string;
             nombre = 1;
-            
+        '''
+        input_stream = InputStream(codigo)  
+
+        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+
+        self.assertEqual(compilado, False)
+
+    def test_asginacion_variables_integer_error(self):
+        codigo = '''
             let edad: integer;
             edad = "5";
-            
+        '''
+        input_stream = InputStream(codigo)  
+
+        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+
+        self.assertEqual(compilado, False)
+
+    def test_asginacion_variables_boolean_error(self):
+        codigo = '''
             let esMujer: boolean;
             esMujer = "true";
+        '''
+        input_stream = InputStream(codigo)  
 
+        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+
+        self.assertEqual(compilado, False)
+    
+    def test_asginacion_variables_arrays_error(self):
+        codigo = '''
             let numeros: integer[];
             numeros = [1, "2", 3, 4, 5];  
 
@@ -84,11 +119,68 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, msg ,errores = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
 
         self.assertEqual(compilado, False)
 
-    def test_operadores(self):
+    def test_op_multiplicativeExpr(self):
+        codigo = '''
+            let x:integer = 5 / 3 * 2;
+            let a:integer = 10;
+            let b:integer = 20;
+            let c:integer = a * b * (a / b) / 2;
+        '''
+        input_stream = InputStream(codigo)  
+
+        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+
+        self.assertEqual(compilado, True)
+    
+    def test_op_additiveExpr(self):
+        codigo = '''
+            let x:integer = 5 + 3 - 2;
+            let a:integer = 10;
+            let b:integer = 20;
+            let c:integer = a - b + (a + b) - 2;
+            let e: string = "hola" + "mundo";
+        '''
+        input_stream = InputStream(codigo)  
+
+        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+
+        self.assertEqual(compilado, True)
+
+    def test_op_relationalExpr(self):
+        codigo = '''
+            let x:integer = 5 + 3 * 2;
+            let y: boolean = !(x < 10 || x > 20);
+
+            let a:integer = 10;
+            let b:integer = 20;
+            let c:integer = a + b * (a - b) / 2;
+            let d: boolean = (a >= b) || (c > 15) && (a < 30);
+        '''
+        input_stream = InputStream(codigo)  
+
+        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+
+        self.assertEqual(compilado, True)
+
+    def test_op_equalityExpr(self):
+        codigo = '''
+            let a:integer = 10;
+            let b:integer = 20;
+            let c:integer = a + b * (a - b) / 2;
+            let d: boolean = (a == b) || (c != 15) && (a < 30);
+            
+        '''
+        input_stream = InputStream(codigo)  
+
+        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+
+        self.assertEqual(compilado, True)
+
+    def test_op_logical(self):
         codigo = '''
             let x:integer = 5 + 3 * 2;
             let y: boolean = !(x < 10 || x > 20);
@@ -97,15 +189,14 @@ class TestCompilador(unittest.TestCase):
             let b:integer = 20;
             let c:integer = a + b * (a - b) / 2;
             let d: boolean = (a == b) || (c != 15) && (a < 30);
-            let e: string = "hola" + "mundo";
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, msg ,errores = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
 
         self.assertEqual(compilado, True)
     
-    def test_operadores_error(self):
+    def test_op_logical_error(self):
         codigo = '''
             let x:integer = 5 + "3" * 2;
             let y: boolean = !("x" < 10 || x > 20);
@@ -116,7 +207,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, msg ,errores = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
 
         self.assertEqual(compilado, False)
 
@@ -136,7 +227,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, msg ,errores = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
 
         self.assertEqual(compilado, True)
 
@@ -199,8 +290,6 @@ class TestCompilador(unittest.TestCase):
                     print("otro");
                 }
 
-                let numeros: integer[] = [1, 2, 3, 4, 5];  
-
                 foreach (n in numeros) { 
                 if (n == 3) {
                     continue;
@@ -213,7 +302,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, msg ,errores = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
 
         self.assertEqual(compilado, True)
 
