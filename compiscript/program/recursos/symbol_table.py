@@ -5,6 +5,7 @@ class Symbol:
         self.size = size
         self.scope = scope
         self.parent_scope = parent_scope
+        self.offset = offset
 
     def __str__(self):
         return f"{self.id:<15} {str(self.data_type):<15} {str(self.size):<5} {str(self.scope):<5}"
@@ -19,14 +20,14 @@ class Symbol:
         }
 
 class VariableSymbol(Symbol):
-    def __init__(self, id, data_type, size=0, scope=None, parent_scope=None, p_class=None, p_function=None, role='Variable'):
+    def __init__(self, id, data_type, size=0, scope=None, parent_scope=None, p_class=None, p_function=None, role='Variable',  offset=None):
         super().__init__(id, data_type, size, scope, parent_scope)
         self.p_class = p_class
         self.p_function = p_function
         self.role = role 
 
     def __str__(self):
-        return (f"{str(self.id):<15} {str(self.data_type):<15} {str(self.size):<5} {str(self.scope):<5} "
+        return (f"{str(self.id):<15} {str(self.data_type):<15} {str(self.size):<5}  {str(self.offset):<5} {str(self.scope):<5} "
                 f"{str(self.parent_scope):<10} {str(self.p_class):<10} {str(self.p_function):<10} {str(self.role):<10}")
 
     def to_dict(self):
@@ -59,10 +60,10 @@ class FunctionSymbol(Symbol):
    
 class SymbolTable:
     def __init__(self):
-        self.scopes = [{}]  
+        self.scopes = [{'symbols': {}, 'offset_counter': 0}]  
 
     def enter_scope(self):
-        self.scopes.append({})
+        self.scopes.append({'symbols': {}, 'offset_counter': 0})
 
     def exit_scope(self):
         if len(self.scopes) > 1:
@@ -72,13 +73,18 @@ class SymbolTable:
         current_scope = self.scopes[-1]
         if symbol_row.id in current_scope:
             return False
-        current_scope[symbol_row.id] = symbol_row
+
+        if isinstance(symbol_row, VariableSymbol):
+            symbol_row.offset = current_scope['offset_counter']
+            current_scope['offset_counter'] += symbol_row.size
+            
+        current_scope['symbols'][symbol_row.id] = symbol_row
         return True
 
     def find(self, name):
         for scope in reversed(self.scopes):
-            if name in scope:
-                return scope[name]
+            if name in scope['symbols']:
+                return scope['symbols'][name]
         return None 
 
     def get_current_scope_level(self):
@@ -86,7 +92,7 @@ class SymbolTable:
     
     def find_in_current_scope(self, name):
         current_scope = self.scopes[-1]
-        return current_scope.get(name)
+        return current_scope['symbols'].get(name)
 
     def print_table(self):
         
