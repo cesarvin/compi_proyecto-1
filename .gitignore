@@ -1,4 +1,4 @@
 configs
-program/__pycache__
-recursos/__pycache__
-visitor/__pycache__
+compiscript/program/__pycache__
+compiscript/recursos/__pycache__
+compiscript/visitor/__pycache__
