@@ -6,16 +6,32 @@ class Quadruple:
         self.result = result
 
     def __str__(self):
-        if self.op in ['=', 'GOTO', 'PARAM', 'RETURN']:
-            return f"{self.result} = {self.op} {self.arg1}"
+        if self.op.endswith(':'):
+            return f"  {self.op}"
+
+        elif self.op in ['CALL', 'NEW']:
+            arg2_str = f", {self.arg2}" if self.arg2 is not None else ""
+            return f"  {self.result} = {self.op} {self.arg1}{arg2_str}"
+
+        elif self.op == '=':
+            return f"  {self.result} = {self.arg1}"
+
         elif self.op.startswith('IF'):
-            return f"{self.op} {self.arg1} GOTO {self.result}"
+            return f"  {self.op} {self.arg1} GOTO {self.result}"
+
+        elif self.op == 'GOTO':
+            return f"  {self.op} {self.result}"
+        
+        elif self.op in ['PARAM', 'RETURN', 'BEGIN_FUNC', 'END_FUNC']:
+            arg1_str = f" {self.arg1}" if self.arg1 is not None else ""
+            return f"  {self.op}{arg1_str}"
+
         else:
-            return f"{self.result} = {self.arg1} {self.op} {self.arg2}"
+            return f"  {self.result} = {self.arg1} {self.op} {self.arg2}"
 
 class TACode:
     def __init__(self):
-        self.instructions = []  # Lista para guardar los objetos Quadruple
+        self.instructions = []
         self.temp_counter = 0
 
     def new_temp(self):

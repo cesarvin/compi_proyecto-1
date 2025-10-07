@@ -4,9 +4,11 @@ from visitor.CompiscriptLexer import CompiscriptLexer
 from visitor.CompiscriptParser import CompiscriptParser
 from cs_type_check_visitor import TypeCheckVisitor
 from cs_init_visitor import InitVisitor
+from cs_tac_visitor import TACVisitor
 from recursos.error_handler import SyntaxErrorHandler, ErrorHandler
 from recursos.symbol_table import SymbolTable
 from recursos.type_table import TypeTable
+from recursos.tac_handler import TACode
 
 
 def main(argv):
@@ -76,7 +78,16 @@ def compilar(code = ""):
     # symbol_table.print_table()
     
     # type_table.print_table()
+
+    # --- GENERACIÓN TAC --- 
+    print("\nIniciando generación de Código de Tres Direcciones...")
     
+    tac_visitor = TACVisitor(symbol_table=symbol_table, type_table=type_table)
+    
+    tac_code_obj = tac_visitor.visit(tree)
+    
+    tac_code_obj.print_code()
+
     return True, "El código está correcto", [], symbol_table.to_dict(), type_table.to_dict()
         
     # except OperationalError as e:
@@ -84,9 +95,9 @@ def compilar(code = ""):
 
 
 if __name__ == '__main__':
-    #main(sys.argv)
-    try:
-        main(sys.argv)
-    except Exception as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+    main(sys.argv)
+    # try:
+    #     main(sys.argv)
+    # except Exception as e:
+    #     print(f"Error: {e}")
+    #     sys.exit(1)

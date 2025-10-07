@@ -40,7 +40,7 @@ class TypeCheckVisitor(CompiscriptVisitor):
         # self.symbol_table.print_table()
         # print("#" * 100 + "\n")
         # al finalzar se elimina el ambito
-        self.symbol_table.exit_scope()
+        #self.symbol_table.exit_scope()
 
 
     # Visit a parse tree produced by CompiscriptParser#variableDeclaration.

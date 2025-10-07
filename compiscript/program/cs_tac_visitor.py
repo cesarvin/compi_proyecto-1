@@ -5,12 +5,12 @@ from recursos.error_handler import ErrorHandler
 from recursos.symbol_table import *
 from recursos.type_table import *
 from recursos.tac_handler import *
+from cs_type_check_visitor import TypeCheckVisitor
 
 class TACVisitor(CompiscriptVisitor):
-    def __init__(self, error_handler: ErrorHandler, symbol_table: SymbolTable, type_table: TypeTable):
+    def __init__(self, symbol_table: SymbolTable, type_table: TypeTable):
 
         super().__init__()
-        self.error_handler = error_handler
         self.symbol_table = symbol_table
         self.type_table = type_table
         self.loops_count = 0
@@ -19,13 +19,36 @@ class TACVisitor(CompiscriptVisitor):
         self.current_class = None 
         self.current_switch = []
         self.control_switch_cases = []
+        
         self.tac = TACode()
         self.label_counter = 0
+
+        self.loop_start_labels = [] 
+        self.loop_end_labels = [] 
     
     def new_label(self):
         label_name = f"_L{self.label_counter}"
         self.label_counter += 1
         return label_name
+    
+    def _get_type_from_addr(self, addr: str, ctx):
+        
+        if addr == 'this':
+            if self.current_class:
+                return self.current_class
+        
+        elif not addr.startswith('[') and not addr.startswith('t'):
+            symbol = self.symbol_table.find(addr)
+            if symbol:
+                return symbol.data_type
+        
+        class DummyErrorHandler:
+            def add_error(self, *args): pass
+        
+        type_checker = TypeCheckVisitor(DummyErrorHandler(), self.symbol_table, self.type_table)
+        type_checker.current_class = self.current_class # Sincronizamos el estado
+        return type_checker.visit(ctx)
+
 
     # Visit a parse tree produced by CompiscriptParser#program.
     def visitProgram(self, ctx:CompiscriptParser.ProgramContext):
@@ -40,12 +63,32 @@ class TACVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#block.
     def visitBlock(self, ctx:CompiscriptParser.BlockContext):
-        return self.visitChildren(ctx)
+        self.visitChildren(ctx)
 
 
     # Visit a parse tree produced by CompiscriptParser#variableDeclaration.
     def visitVariableDeclaration(self, ctx:CompiscriptParser.VariableDeclarationContext):
-        return self.visitChildren(ctx)
+        
+        variable = ctx.Identifier().getText()
+        
+        symbol = self.symbol_table.find_in_current_scope(variable)
+        if not symbol:
+            symbol_to_clone = self.symbol_table.find(variable)
+            if symbol_to_clone:
+                self.symbol_table.add(symbol_to_clone)
+                symbol = symbol_to_clone
+
+        if ctx.initializer():
+            right_side_addr = self.visit(ctx.initializer().expression())
+            
+            symbol = self.symbol_table.find(variable)
+            if symbol and symbol.offset is not None:
+                left_side_addr = f"[BP+{symbol.offset}]"
+                self.tac.add_instruction('=', right_side_addr, None, left_side_addr)
+            else:
+                print(f"ADVERTENCIA: No se encontró el símbolo '{variable}' durante la generación de TAC.")
+
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#constantDeclaration.
@@ -65,7 +108,36 @@ class TACVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#assignment.
     def visitAssignment(self, ctx:CompiscriptParser.AssignmentContext):
-        return self.visitChildren(ctx)
+        
+        is_prop_assign = ctx.getChild(1).getText() == '.'
+        expr_node = ctx.expression(1) if is_prop_assign else ctx.expression(0)
+        right_side_addr = self.visit(expr_node)
+
+        left_side_addr = None
+        
+        if is_prop_assign:
+            
+            base_addr = self.visit(ctx.expression(0))  # Dirección de 'this'
+            base_type = self._get_type_from_addr(base_addr, ctx.expression(0))
+            prop_name = ctx.Identifier().getText()     # Nombre de la propiedad 'name'
+
+            if isinstance(base_type, ClassType):
+                class_name = str(base_type)
+                class_type_row = self.type_table.find(class_name)
+                if class_type_row and prop_name in class_type_row.attributes:
+                    prop_offset = 0 
+                    left_side_addr = f"[{base_addr}+{prop_offset}]" # ej. [this+0]
+        else:
+            var_name = ctx.Identifier().getText()
+            symbol = self.symbol_table.find(var_name)
+            if symbol and symbol.offset is not None:
+                left_side_addr = f"[BP+{symbol.offset}]"
+        
+        
+        if left_side_addr and right_side_addr:
+            self.tac.add_instruction('=', right_side_addr, None, left_side_addr)
+        
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#expressionStatement.
@@ -75,27 +147,105 @@ class TACVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#printStatement.
     def visitPrintStatement(self, ctx:CompiscriptParser.PrintStatementContext):
-        return self.visitChildren(ctx)
+        expr_addr = self.visit(ctx.expression())
+        self.tac.add_instruction('PARAM', arg1=expr_addr)
+        self.tac.add_instruction('CALL', arg1='print', arg2='1')
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#ifStatement.
     def visitIfStatement(self, ctx:CompiscriptParser.IfStatementContext):
-        return self.visitChildren(ctx)
+        condition_addr = self.visit(ctx.expression())
+        has_else = len(ctx.block()) > 1
+        else_label = self.new_label()
+        end_label = self.new_label()
+        target_label = else_label if has_else else end_label
+        self.tac.add_instruction(op='IF_FALSE', arg1=condition_addr, result=target_label)
+        self.visit(ctx.block(0))
+
+        if has_else:
+            self.tac.add_instruction(op='GOTO', result=end_label)
+            self.tac.add_instruction(op=else_label + ':')
+            self.visit(ctx.block(1))
+
+        self.tac.add_instruction(op=end_label + ':')
+
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#whileStatement.
     def visitWhileStatement(self, ctx:CompiscriptParser.WhileStatementContext):
-        return self.visitChildren(ctx)
+
+        start_label = self.new_label()
+        end_label = self.new_label()
+
+        self.loop_start_labels.append(start_label)
+        self.loop_end_labels.append(end_label)
+        self.tac.add_instruction(op=start_label + ':')
+
+        condition_addr = self.visit(ctx.expression())
+
+        self.tac.add_instruction(op='IF_FALSE', arg1=condition_addr, result=end_label)
+        self.visit(ctx.block())
+        self.tac.add_instruction(op='GOTO', result=start_label)
+        self.tac.add_instruction(op=end_label + ':')
+        self.loop_start_labels.pop()
+        self.loop_end_labels.pop()
+
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#doWhileStatement.
     def visitDoWhileStatement(self, ctx:CompiscriptParser.DoWhileStatementContext):
-        return self.visitChildren(ctx)
+        start_label = self.new_label()
+        end_label = self.new_label()
+        condition_label = self.new_label()
+        self.loop_start_labels.append(condition_label) # 'continue' salta a la condición
+        self.loop_end_labels.append(end_label)         
+        self.tac.add_instruction(op=start_label + ':')
+        self.visit(ctx.block())
+        self.tac.add_instruction(op=condition_label + ':')
+        condition_addr = self.visit(ctx.expression())
+        self.tac.add_instruction(op='IF_TRUE', arg1=condition_addr, result=start_label)
+        self.tac.add_instruction(op=end_label + ':')
+        self.loop_start_labels.pop()
+        self.loop_end_labels.pop()
+
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#forStatement.
     def visitForStatement(self, ctx:CompiscriptParser.ForStatementContext):
-        return self.visitChildren(ctx)
+        
+        if ctx.variableDeclaration():
+            self.visit(ctx.variableDeclaration())
+        elif ctx.assignment():
+            self.visit(ctx.assignment())
+
+        start_label = self.new_label()
+        continue_label = self.new_label()
+        end_label = self.new_label()
+        
+        self.loop_start_labels.append(continue_label)
+        self.loop_end_labels.append(end_label)
+        self.tac.add_instruction(op=start_label + ':')
+        
+        if ctx.expression(0):
+            condition_addr = self.visit(ctx.expression(0))
+            self.tac.add_instruction(op='IF_FALSE', arg1=condition_addr, result=end_label)
+        
+        self.visit(ctx.block())
+        self.tac.add_instruction(op=continue_label + ':')
+        
+        if ctx.expression(1):
+            self.visit(ctx.expression(1))
+            
+        self.tac.add_instruction(op='GOTO', result=start_label)
+        self.tac.add_instruction(op=end_label + ':')
+        self.loop_start_labels.pop()
+        self.loop_end_labels.pop()
+
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#foreachStatement.
@@ -105,17 +255,30 @@ class TACVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#breakStatement.
     def visitBreakStatement(self, ctx:CompiscriptParser.BreakStatementContext):
-        return self.visitChildren(ctx)
+        if self.loop_end_labels:
+            end_label = self.loop_end_labels[-1]
+            self.tac.add_instruction(op='GOTO', result=end_label)
+        
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#continueStatement.
     def visitContinueStatement(self, ctx:CompiscriptParser.ContinueStatementContext):
-        return self.visitChildren(ctx)
+        if self.loop_start_labels:
+            start_label = self.loop_start_labels[-1]
+            self.tac.add_instruction(op='GOTO', result=start_label)
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#returnStatement.
     def visitReturnStatement(self, ctx:CompiscriptParser.ReturnStatementContext):
-        return self.visitChildren(ctx)
+        if ctx.expression():
+            return_addr = self.visit(ctx.expression())
+            self.tac.add_instruction(op='RETURN', arg1=return_addr)
+        else:
+            
+            self.tac.add_instruction(op='RETURN')
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#tryCatchStatement.
@@ -140,7 +303,31 @@ class TACVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#functionDeclaration.
     def visitFunctionDeclaration(self, ctx:CompiscriptParser.FunctionDeclarationContext):
-        return self.visitChildren(ctx)
+        func_name = ctx.Identifier().getText()
+
+        self.tac.add_instruction(op=f'{func_name}:')
+        self.tac.add_instruction(op='BEGIN_FUNC')
+        self.symbol_table.enter_scope()
+        
+        if self.current_class:
+            this_symbol = VariableSymbol(id='this', data_type=self.current_class, size=8, role='Parameter', offset=0)
+            self.symbol_table.add(this_symbol)
+            
+            full_method_name = f"{self.current_class}.{func_name}" if func_name != "constructor" else func_name
+            method_symbol = self.symbol_table.find(full_method_name)
+
+            if method_symbol and isinstance(method_symbol.data_type, FunctionType):
+                param_offset_start = 8 
+
+                for i, param in enumerate(method_symbol.parameters):
+                    param.offset = param_offset_start + (i * 8) # Asumiendo tamaño 8
+                    self.symbol_table.add(param)
+
+        self.visit(ctx.block())
+        self.symbol_table.exit_scope()
+
+        self.tac.add_instruction(op='END_FUNC')
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#parameters.
@@ -155,7 +342,24 @@ class TACVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#classDeclaration.
     def visitClassDeclaration(self, ctx:CompiscriptParser.ClassDeclarationContext):
-        return self.visitChildren(ctx)
+        class_name = ctx.Identifier(0).getText()
+        class_type_row = self.type_table.find(class_name)
+
+        if not class_type_row: return
+        
+        previous_class = self.current_class
+        self.current_class = class_type_row.data_type
+
+        self.symbol_table.enter_scope()
+
+        for member in ctx.classMember():
+            if member.functionDeclaration():
+                self.visit(member)
+
+        self.symbol_table.exit_scope()
+        self.current_class = previous_class # Restauramos el estado
+
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#classMember.
@@ -190,37 +394,118 @@ class TACVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#logicalOrExpr.
     def visitLogicalOrExpr(self, ctx:CompiscriptParser.LogicalOrExprContext):
-        return self.visitChildren(ctx)
+        operands = ctx.logicalAndExpr() 
+
+        if len(operands) == 1:
+            return self.visit(operands[0])
+
+        left_addr = self.visit(operands[0])
+        right_addr = self.visit(operands[1])
+        result_addr = self.tac.new_temp()
+        op = ctx.getChild(1).getText()
+        
+        self.tac.add_instruction(op, left_addr, right_addr, result_addr)
+        
+        return result_addr
 
 
     # Visit a parse tree produced by CompiscriptParser#logicalAndExpr.
     def visitLogicalAndExpr(self, ctx:CompiscriptParser.LogicalAndExprContext):
-        return self.visitChildren(ctx)
+        operands = ctx.equalityExpr() 
+
+        if len(operands) == 1:
+            return self.visit(operands[0])
+
+        left_addr = self.visit(operands[0])
+        right_addr = self.visit(operands[1])
+        result_addr = self.tac.new_temp()
+        op = ctx.getChild(1).getText()
+        
+        self.tac.add_instruction(op, left_addr, right_addr, result_addr)
+        
+        return result_addr
 
 
     # Visit a parse tree produced by CompiscriptParser#equalityExpr.
     def visitEqualityExpr(self, ctx:CompiscriptParser.EqualityExprContext):
-        return self.visitChildren(ctx)
+        operands = ctx.relationalExpr() 
+        if len(operands) == 1:
+            return self.visit(operands[0])
+
+        left_addr = self.visit(operands[0])
+        right_addr = self.visit(operands[1])
+        result_addr = self.tac.new_temp()
+        op = ctx.getChild(1).getText()
+        
+        self.tac.add_instruction(op, left_addr, right_addr, result_addr)
+        
+        return result_addr
 
 
     # Visit a parse tree produced by CompiscriptParser#relationalExpr.
     def visitRelationalExpr(self, ctx:CompiscriptParser.RelationalExprContext):
-        return self.visitChildren(ctx)
+
+        if len(ctx.additiveExpr()) == 1:
+            return self.visit(ctx.additiveExpr(0))
+
+        left_addr = self.visit(ctx.additiveExpr(0))
+        right_addr = self.visit(ctx.additiveExpr(1))
+        result_addr = self.tac.new_temp()
+        op = ctx.getChild(1).getText()
+        
+        self.tac.add_instruction(op, left_addr, right_addr, result_addr)
+        
+        return result_addr
 
 
     # Visit a parse tree produced by CompiscriptParser#additiveExpr.
     def visitAdditiveExpr(self, ctx:CompiscriptParser.AdditiveExprContext):
-        return self.visitChildren(ctx)
+        
+        if len(ctx.multiplicativeExpr()) == 1:
+            return self.visit(ctx.multiplicativeExpr(0))
+
+        
+        left_addr = self.visit(ctx.multiplicativeExpr(0))
+        right_addr = self.visit(ctx.multiplicativeExpr(1))
+        result_addr = self.tac.new_temp() # Devuelve "t0"
+        op = ctx.getChild(1).getText() # Obtiene "+"
+        
+        self.tac.add_instruction(op, left_addr, right_addr, result_addr)
+
+        return result_addr
 
 
     # Visit a parse tree produced by CompiscriptParser#multiplicativeExpr.
     def visitMultiplicativeExpr(self, ctx:CompiscriptParser.MultiplicativeExprContext):
-        return self.visitChildren(ctx)
+        
+        if len(ctx.unaryExpr()) == 1:
+            return self.visit(ctx.unaryExpr(0))
+        
+        left_addr = self.visit(ctx.unaryExpr(0))
+        right_addr = self.visit(ctx.unaryExpr(1))
+        result_addr = self.tac.new_temp()
+        op = ctx.getChild(1).getText()
+        self.tac.add_instruction(op, left_addr, right_addr, result_addr)
+        
+        return result_addr
 
 
     # Visit a parse tree produced by CompiscriptParser#unaryExpr.
     def visitUnaryExpr(self, ctx:CompiscriptParser.UnaryExprContext):
-        return self.visitChildren(ctx)
+        
+        if ctx.primaryExpr():
+            return self.visit(ctx.primaryExpr())
+        
+        operand_addr = self.visit(ctx.unaryExpr())
+        op = ctx.getChild(0).getText()
+        result_addr = self.tac.new_temp()
+        
+        if op == '-':
+            self.tac.add_instruction(op, '0', operand_addr, result_addr)
+        elif op == '!':
+            self.tac.add_instruction('==', operand_addr, 'false', result_addr)
+        
+        return result_addr
 
 
     # Visit a parse tree produced by CompiscriptParser#primaryExpr.
@@ -230,32 +515,99 @@ class TACVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#literalExpr.
     def visitLiteralExpr(self, ctx:CompiscriptParser.LiteralExprContext):
-        return self.visitChildren(ctx)
+        if ctx.literal():
+            return self.visit(ctx.literal())
+        return None # Placeholder para otros tipos de literales
 
 
     # Visit a parse tree produced by CompiscriptParser#literal.
     def visitLiteral(self, ctx:CompiscriptParser.LiteralContext):
-        return self.visitChildren(ctx)
+        return ctx.getText()
 
 
     # Visit a parse tree produced by CompiscriptParser#leftHandSide.
     def visitLeftHandSide(self, ctx:CompiscriptParser.LeftHandSideContext):
-        return self.visitChildren(ctx)
+        
+        current_addr = self.visit(ctx.primaryAtom())
+        current_type = self._get_type_from_addr(current_addr, ctx.primaryAtom())
+        
+        for suffix in ctx.suffixOp():
+            
+            if isinstance(current_type, ErrorType): 
+                return ErrorType()
+            
+            if isinstance(suffix, CompiscriptParser.CallExprContext):
+                arg_addrs = []
+                if suffix.arguments():
+                
+                    for arg_expr in suffix.arguments().expression():
+                        arg_addr = self.visit(arg_expr)
+                        self.tac.add_instruction(op='PARAM', arg1=arg_addr)
+                        arg_addrs.append(arg_addr)
+                
+                result_addr = self.tac.new_temp()
+                num_args = len(arg_addrs)
+
+                self.tac.add_instruction(op='CALL', arg1=current_addr, arg2=str(num_args), result=result_addr)
+                current_addr = result_addr
+                
+                if isinstance(current_type, FunctionType):
+                    current_type = current_type.return_type
+
+            elif isinstance(suffix, CompiscriptParser.PropertyAccessExprContext):
+                prop_name = suffix.Identifier().getText()
+                
+                if isinstance(current_type, ClassType):
+                    class_name = str(current_type)
+                    class_type_row = self.type_table.find(class_name)
+                    
+                    if class_type_row and prop_name in class_type_row.attributes:
+                        prop_type = class_type_row.attributes[prop_name]
+                        
+                        if isinstance(prop_type, FunctionType):
+                            current_addr = f"{class_name}.{prop_name}"
+                        else:
+                            prop_offset = 0 
+                            prop_addr = f"[{current_addr}+{prop_offset}]"
+                            value_temp = self.tac.new_temp()
+                            self.tac.add_instruction('=', prop_addr, None, value_temp)
+                            current_addr = value_temp
+                        current_type = prop_type
+
+        return current_addr
 
 
     # Visit a parse tree produced by CompiscriptParser#IdentifierExpr.
     def visitIdentifierExpr(self, ctx:CompiscriptParser.IdentifierExprContext):
-        return self.visitChildren(ctx)
+        var_name = ctx.getText()
+        symbol = self.symbol_table.find(var_name)
+        
+        if symbol and hasattr(symbol, 'offset') and symbol.offset is not None:
+            return f"[BP+{symbol.offset}]"
+        
+        return var_name
 
 
     # Visit a parse tree produced by CompiscriptParser#NewExpr.
     def visitNewExpr(self, ctx:CompiscriptParser.NewExprContext):
-        return self.visitChildren(ctx)
+        class_name = ctx.Identifier().getText()
+        num_args = 0
+        if ctx.arguments():
+            num_args = len(ctx.arguments().expression())
+            for arg_expr in ctx.arguments().expression():
+                arg_addr = self.visit(arg_expr)
+                self.tac.add_instruction(op='PARAM', arg1=arg_addr)
+        
+        result_addr = self.tac.new_temp()
+
+        self.tac.add_instruction(op='NEW', arg1=class_name, arg2=str(num_args), result=result_addr)
+
+        return result_addr
 
 
     # Visit a parse tree produced by CompiscriptParser#ThisExpr.
     def visitThisExpr(self, ctx:CompiscriptParser.ThisExprContext):
-        return self.visitChildren(ctx)
+        return 'this'
 
 
     # Visit a parse tree produced by CompiscriptParser#CallExpr.

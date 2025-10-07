@@ -5,8 +5,7 @@ class Symbol:
         self.size = size
         self.scope = scope
         self.parent_scope = parent_scope
-        self.offset = offset
-
+        
     def __str__(self):
         return f"{self.id:<15} {str(self.data_type):<15} {str(self.size):<5} {str(self.scope):<5}"
     
@@ -25,6 +24,7 @@ class VariableSymbol(Symbol):
         self.p_class = p_class
         self.p_function = p_function
         self.role = role 
+        self.offset = offset
 
     def __str__(self):
         return (f"{str(self.id):<15} {str(self.data_type):<15} {str(self.size):<5}  {str(self.offset):<5} {str(self.scope):<5} "
@@ -71,12 +71,13 @@ class SymbolTable:
 
     def add(self, symbol_row):
         current_scope = self.scopes[-1]
-        if symbol_row.id in current_scope:
+        if symbol_row.id in current_scope['symbols']:
             return False
 
         if isinstance(symbol_row, VariableSymbol):
-            symbol_row.offset = current_scope['offset_counter']
-            current_scope['offset_counter'] += symbol_row.size
+            if symbol_row.offset is None:
+                symbol_row.offset = current_scope['offset_counter']
+                current_scope['offset_counter'] += symbol_row.size
             
         current_scope['symbols'][symbol_row.id] = symbol_row
         return True
@@ -124,6 +125,7 @@ class SymbolTable:
     def to_dict(self):
         table_as_list = []
         for scope in self.scopes:
-            scope_as_dict = {name: symbol.to_dict() for name, symbol in scope.items()}
+            scope_symbols = scope['symbols']
+            scope_as_dict = {name: symbol.to_dict() for name, symbol in scope_symbols.items()}
             table_as_list.append(scope_as_dict)
         return table_as_list
