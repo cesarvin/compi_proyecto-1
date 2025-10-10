@@ -1,15 +1,13 @@
-class Dog {
+class User {
   let name: string;
-
-  function constructor(name: string) {
-    this.name = name;
-  }
-
-  function speak(): string {
-    return this.name + " makes a sound.";
-  }
+  let age: integer;
 }
 
-let dog: Dog = new Dog("Rex");
+// Creamos una instancia de la clase
+let user1: User = new User();
 
-let dog2: Dog = new Dog("snoopy");
+// Asignamos valores a sus propiedades
+user1.name = "Alice";
+user1.age = 30;
+
+print(user1.name);

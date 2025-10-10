@@ -33,3 +33,46 @@ function factorial(n: integer): integer {
   }
   return n * factorial(n - 1);
 }
+
+class Dog {
+  let name: string;
+
+  function constructor(name: string) {
+    this.name = name;
+  }
+
+  function speak(): string {
+    return this.name + " makes a sound.";
+  }
+}
+
+let dog: Dog = new Dog("Rex");
+
+let dog2: Dog = new Dog("snoopy");
+
+let numbers: integer[] = [10, 20, 30];
+
+foreach (num in numbers) {
+  print(num);
+}
+
+
+let dia = 2;
+switch (dia) {
+  case 1:
+    print("Lunes");
+    break;
+  case 2:
+    print("Martes");
+    break;
+  default:
+    print("Otro");
+    break;
+}
+
+
+try {
+  print("Intentando...");
+} catch (e) {
+  print("Error atrapado.");
+}

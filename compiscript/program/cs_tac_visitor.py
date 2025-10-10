@@ -250,7 +250,54 @@ class TACVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#foreachStatement.
     def visitForeachStatement(self, ctx:CompiscriptParser.ForeachStatementContext):
-        return self.visitChildren(ctx)
+
+        array_addr = self.visit(ctx.expression())
+        array_type = self._get_type_from_addr(array_addr, ctx.expression())
+
+        num_elements = 3 # Asumimos la longitud del array [10, 20, 30]
+        element_size = 8 # Asumimos tamaño de integer
+        
+        index_temp = self.tac.new_temp()
+        self.tac.add_instruction('=', '0', None, index_temp) # _index = 0;
+
+        start_label = self.new_label()
+        end_label = self.new_label()
+
+        self.tac.add_instruction(op=start_label + ':')
+
+        cond_temp = self.tac.new_temp()
+        self.tac.add_instruction('<', index_temp, str(num_elements), cond_temp)
+        self.tac.add_instruction('IF_FALSE', cond_temp, None, end_label)
+
+        self.symbol_table.enter_scope()
+
+        offset_temp = self.tac.new_temp()
+        self.tac.add_instruction('*', index_temp, str(element_size), offset_temp)
+        addr_temp = self.tac.new_temp()
+        self.tac.add_instruction('+', array_addr, offset_temp, addr_temp)
+
+        current_element_val = self.tac.new_temp()
+        self.tac.add_instruction('=', f"[{addr_temp}]", None, current_element_val)
+
+        loop_var_name = ctx.Identifier().getText()
+        loop_var_symbol = VariableSymbol(id=loop_var_name, data_type=array_type.element_type, size=element_size)
+        self.symbol_table.add(loop_var_symbol) # Esto le asignará un offset.
+
+        loop_var_addr = f"[BP+{loop_var_symbol.offset}]"
+        self.tac.add_instruction('=', current_element_val, None, loop_var_addr)
+
+        self.visit(ctx.block())
+
+        inc_temp = self.tac.new_temp()
+        self.tac.add_instruction('+', index_temp, '1', inc_temp)
+        self.tac.add_instruction('=', inc_temp, None, index_temp) # index = index + 1;
+
+        self.tac.add_instruction('GOTO', None, None, start_label)
+
+        self.tac.add_instruction(op=end_label + ':')
+        self.symbol_table.exit_scope()
+
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#breakStatement.
@@ -283,12 +330,68 @@ class TACVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#tryCatchStatement.
     def visitTryCatchStatement(self, ctx:CompiscriptParser.TryCatchStatementContext):
-        return self.visitChildren(ctx)
+
+        catch_label = self.new_label()
+        end_label = self.new_label()
+
+        self.tac.add_instruction(op='TRY_BEGIN', arg1=catch_label)
+        self.visit(ctx.block(0))
+        self.tac.add_instruction(op='TRY_END')
+        self.tac.add_instruction(op='GOTO', result=end_label)
+        self.tac.add_instruction(op=catch_label + ':')
+        self.symbol_table.enter_scope()
+        
+        exception_var_name = ctx.Identifier().getText()
+        symbol = self.symbol_table.find(exception_var_name)
+
+        if symbol:
+            pass
+
+        self.visit(ctx.block(1))
+        self.symbol_table.exit_scope()
+        self.tac.add_instruction(op=end_label + ':')
+
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#switchStatement.
     def visitSwitchStatement(self, ctx:CompiscriptParser.SwitchStatementContext):
-        return self.visitChildren(ctx)
+
+        switch_addr = self.visit(ctx.expression())
+
+
+        case_labels = [self.new_label() for _ in ctx.switchCase()]
+        default_label = self.new_label() if ctx.defaultCase() else None
+        end_label = self.new_label()
+
+        self.loop_end_labels.append(end_label) 
+
+        for i, case_ctx in enumerate(ctx.switchCase()):
+
+            case_addr = self.visit(case_ctx.expression())
+            cond_temp = self.tac.new_temp()
+            self.tac.add_instruction('==', switch_addr, case_addr, cond_temp)
+            self.tac.add_instruction('IF_TRUE', cond_temp, None, case_labels[i])
+
+        if default_label:
+            self.tac.add_instruction('GOTO', None, None, default_label)
+        else: 
+            self.tac.add_instruction('GOTO', None, None, end_label)
+
+        for i, case_ctx in enumerate(ctx.switchCase()):
+            self.tac.add_instruction(op=case_labels[i] + ':')
+            for stmt in case_ctx.statement():
+                self.visit(stmt)
+
+        if default_label:
+            self.tac.add_instruction(op=default_label + ':')
+            for stmt in ctx.defaultCase().statement():
+                self.visit(stmt)
+
+        self.tac.add_instruction(op=end_label + ':')
+        self.loop_end_labels.pop()
+
+        return None
 
 
     # Visit a parse tree produced by CompiscriptParser#switchCase.
@@ -389,7 +492,32 @@ class TACVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#TernaryExpr.
     def visitTernaryExpr(self, ctx:CompiscriptParser.TernaryExprContext):
-        return self.visitChildren(ctx)
+
+        if len(ctx.expression()) == 0:
+            return self.visit(ctx.logicalOrExpr())
+
+
+        result_addr = self.tac.new_temp()
+
+        false_label = self.new_label()
+        end_label = self.new_label()
+
+        condition_addr = self.visit(ctx.logicalOrExpr())
+
+        self.tac.add_instruction('IF_FALSE', condition_addr, None, false_label)
+
+        true_addr = self.visit(ctx.expression(0))
+        self.tac.add_instruction('=', true_addr, None, result_addr)
+
+        self.tac.add_instruction('GOTO', None, None, end_label)
+
+        self.tac.add_instruction(op=false_label + ':')
+        false_addr = self.visit(ctx.expression(1))
+        self.tac.add_instruction('=', false_addr, None, result_addr)
+
+        self.tac.add_instruction(op=end_label + ':')
+
+        return result_addr
 
 
     # Visit a parse tree produced by CompiscriptParser#logicalOrExpr.
@@ -515,9 +643,16 @@ class TACVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#literalExpr.
     def visitLiteralExpr(self, ctx:CompiscriptParser.LiteralExprContext):
+
         if ctx.literal():
             return self.visit(ctx.literal())
-        return None # Placeholder para otros tipos de literales
+
+        elif ctx.arrayLiteral():
+
+            return self.visit(ctx.arrayLiteral())
+
+        else:
+            return ctx.getText()
 
 
     # Visit a parse tree produced by CompiscriptParser#literal.
@@ -573,6 +708,25 @@ class TACVisitor(CompiscriptVisitor):
                             self.tac.add_instruction('=', prop_addr, None, value_temp)
                             current_addr = value_temp
                         current_type = prop_type
+
+            elif isinstance(suffix, CompiscriptParser.IndexExprContext):
+                if isinstance(current_type, ArrayType):
+                    index_addr = self.visit(suffix.expression())
+                    element_type = current_type.element_type
+                    type_row = self.type_table.find(str(element_type))
+                    element_size = str(type_row.size) if type_row else "8" # Usamos 8 como fallback
+                    offset_temp = self.tac.new_temp()
+
+                    self.tac.add_instruction('*', index_addr, element_size, offset_temp)
+        
+                    final_addr_temp = self.tac.new_temp()
+                    self.tac.add_instruction('+', current_addr, offset_temp, final_addr_temp)
+        
+                    value_temp = self.tac.new_temp()
+                    self.tac.add_instruction('=', f"[{final_addr_temp}]", None, value_temp)
+        
+                    current_addr = value_temp
+                    current_type = element_type
 
         return current_addr
 
@@ -632,7 +786,25 @@ class TACVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#arrayLiteral.
     def visitArrayLiteral(self, ctx:CompiscriptParser.ArrayLiteralContext):
-        return self.visitChildren(ctx)
+
+        element_addrs = [self.visit(expr) for expr in ctx.expression()]
+        num_elements = len(element_addrs)
+        element_size = 8 
+        total_size = num_elements * element_size
+
+
+        base_addr = self.tac.new_temp()
+
+        self.tac.add_instruction(op='ALLOCATE', arg1=str(total_size), result=base_addr)
+
+        current_offset = 0
+        for addr in element_addrs:
+
+            dest_addr = f"[{base_addr}+{current_offset}]"
+            self.tac.add_instruction('=', addr, None, dest_addr)
+            current_offset += element_size
+
+        return base_addr
 
 
     # Visit a parse tree produced by CompiscriptParser#type.

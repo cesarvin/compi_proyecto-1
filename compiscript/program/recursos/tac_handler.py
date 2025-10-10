@@ -9,20 +9,20 @@ class Quadruple:
         if self.op.endswith(':'):
             return f"  {self.op}"
 
-        elif self.op in ['CALL', 'NEW']:
+        elif self.op in ['CALL', 'NEW', 'ALLOCATE']:
+            result_str = f"{self.result} = " if self.result else ""
             arg2_str = f", {self.arg2}" if self.arg2 is not None else ""
-            return f"  {self.result} = {self.op} {self.arg1}{arg2_str}"
+            return f"  {result_str}{self.op} {self.arg1}{arg2_str}"
 
         elif self.op == '=':
             return f"  {self.result} = {self.arg1}"
 
         elif self.op.startswith('IF'):
             return f"  {self.op} {self.arg1} GOTO {self.result}"
-
         elif self.op == 'GOTO':
             return f"  {self.op} {self.result}"
         
-        elif self.op in ['PARAM', 'RETURN', 'BEGIN_FUNC', 'END_FUNC']:
+        elif self.op in ['PARAM', 'RETURN', 'BEGIN_FUNC', 'END_FUNC', 'TRY_BEGIN', 'TRY_END']:
             arg1_str = f" {self.arg1}" if self.arg1 is not None else ""
             return f"  {self.op}{arg1_str}"
 
