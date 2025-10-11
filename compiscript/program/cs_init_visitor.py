@@ -51,6 +51,7 @@ class InitVisitor(CompiscriptVisitor):
 
         parent_name = "Object"
         attributes = {}
+        prop_offset_counter = 0
 
         if len(ctx.Identifier()) > 1:
             parent_name = ctx.Identifier(1).getText() 
@@ -89,7 +90,14 @@ class InitVisitor(CompiscriptVisitor):
                 prop_decl = member_ctx.variableDeclaration()
                 prop_name = prop_decl.Identifier().getText()
                 prop_type = self.visit(prop_decl.typeAnnotation().type_())
-                attributes[prop_name] = prop_type
+                attributes[prop_name] = {
+                    'type': prop_type,
+                    'offset': prop_offset_counter
+                }
+                
+                type_row = self.type_table.find("array" if isinstance(prop_type, ArrayType) else str(prop_type))
+                if type_row:
+                    prop_offset_counter += type_row.size
 
         class_type_row = TypeRow(
             data_type=ClassType(clase), 

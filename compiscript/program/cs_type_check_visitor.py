@@ -208,7 +208,8 @@ class TypeCheckVisitor(CompiscriptVisitor):
                 self.error_handler.add_error(message, ctx.Identifier().getSymbol().line, ctx.Identifier().getSymbol().column)
                 return ErrorType()
             
-            target_type = clase_type.attributes[propiedad]
+            prop_info = clase_type.attributes[propiedad] # Obtenemos el diccionario completo
+            target_type = prop_info['type']
 
             assigned_expression = ctx.expression(1)
             assigned_type = self.visit(assigned_expression)
@@ -1053,13 +1054,21 @@ class TypeCheckVisitor(CompiscriptVisitor):
                 clase = str(current_type)
                 class_type_row = self.type_table.find(clase)
                 prop_name = suffix.Identifier().getText()
-
+                
                 if prop_name not in class_type_row.attributes:
                     message = f"El tipo '{clase}' no tiene una propiedad llamada '{prop_name}'"
                     self.error_handler.add_error(message, suffix.start.line, suffix.start.column)
                     return ErrorType()
+                # --- INICIO DE LA CORRECCIÓN ---
+                prop_info = class_type_row.attributes[prop_name]
                 
-                current_type = class_type_row.attributes[prop_name]
+                # Comprobamos si es un método (FunctionType) o una propiedad de datos (dict)
+                if isinstance(prop_info, FunctionType):
+                    current_type = prop_info
+                else:
+                    # Si es una propiedad, extraemos su tipo del diccionario
+                    current_type = prop_info['type']
+                # --- FIN DE LA CORRECCIÓN ---
 
         return current_type
 

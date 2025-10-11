@@ -34,12 +34,12 @@ class TACode:
         self.instructions = []
         self.temp_counter = 0
 
-    def new_temp(self):
+    def add_temp(self):
         temp_name = f"t{self.temp_counter}"
         self.temp_counter += 1
         return temp_name
 
-    def add_instruction(self, op, arg1=None, arg2=None, result=None):
+    def add_quadruple(self, op, arg1=None, arg2=None, result=None):
         quad = Quadruple(op, arg1, arg2, result)
         self.instructions.append(quad)
 
