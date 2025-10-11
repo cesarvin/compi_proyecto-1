@@ -29,6 +29,14 @@ class Quadruple:
         else:
             return f"  {self.result} = {self.arg1} {self.op} {self.arg2}"
 
+    def to_dict(self):
+        return {
+            'op': self.op,
+            'arg1': self.arg1,
+            'arg2': self.arg2,
+            'result': self.result
+        }
+
 class TACode:
     def __init__(self):
         self.instructions = []
@@ -48,3 +56,6 @@ class TACode:
         for i, instruction in enumerate(self.instructions):
             print(f"{i:>3}:  {instruction}")
         print("=" * 66 + "\n")
+
+    def to_dict(self):
+        return [instruction.to_dict() for instruction in self.instructions]

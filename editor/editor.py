@@ -79,12 +79,16 @@ def compile():
 
         info_text.config(state="normal")
         info_text.delete("1.0", tk.END)
+
+        tac_text.config(state="normal")
+        tac_text.delete("1.0", tk.END)
         
         compilation_success = result.get('compilado', False)
         message = result.get('result', 'No hay resultados')
         errors = result.get('errors', [])
         symbol_table = result.get('symbol_table', [])
         type_table = result.get('type_table', {})
+        tac_code = result.get('tac_code', [])
 
         output_text.insert(tk.END, f"Resultado del analisis: {message}\n")
         output_text.insert(tk.END, ("-" * 50) + "\n\n")
@@ -129,6 +133,38 @@ def compile():
 
             if has_info:
                 tab_to_select = info_frame
+            
+            if tac_code:
+                has_info = True 
+                tac_text.insert(tk.END, "=" * 20 + " CÓDIGO INTERMEDIO (TAC) " + "=" * 20 + "\n")
+                
+                for i, quad in enumerate(tac_code):
+                    op = quad.get('op', '')
+                    arg1 = quad.get('arg1', '') or ''
+                    arg2 = quad.get('arg2', '') or ''
+                    result = quad.get('result', '') or ''
+                    
+                    line_str = ""
+                    if op.endswith(':'):
+                        line_str = f"  {op}"
+                    elif op in ['CALL', 'NEW', 'ALLOCATE']:
+                        result_str = f"{result} = " if result else ""
+                        arg2_str = f", {arg2}" if arg2 else ""
+                        line_str = f"  {result_str}{op} {arg1}{arg2_str}"
+                    elif op == '=':
+                        line_str = f"  {result} = {arg1}"
+                    elif op.startswith('IF'):
+                        line_str = f"  {op} {arg1} GOTO {result}"
+                    elif op == 'GOTO':
+                        line_str = f"  {op} {result}"
+                    elif op in ['PARAM', 'RETURN', 'BEGIN_FUNC', 'END_FUNC', 'TRY_BEGIN', 'TRY_END']:
+                        line_str = f"  {op} {arg1}"
+                    else:
+                        line_str = f"  {result} = {arg1} {op} {arg2}"
+                    
+                    tac_text.insert(tk.END, f"{i:>3}: {line_str}\n")
+                
+                tab_to_select = tac_frame
 
     except requests.exceptions.RequestException as e:
         messagebox.showerror("Error de Conexión", f"No se pudo conectar al servidor.\n\nError: {e}")
@@ -153,6 +189,10 @@ def clear():
     info_text.config(state="normal")
     info_text.delete("1.0", tk.END)
     info_text.config(state="disabled")
+
+    tac_text.config(state="normal")
+    tac_text.delete("1.0", tk.END)
+    tac_text.config(state="disabled")
 
 def open_file():
     filepath = filedialog.askopenfilename(
@@ -205,5 +245,11 @@ bottom_notebook.add(info_frame, text='Información')
 info_text = tk.Text(info_frame, height=8)
 info_text.pack(fill="both", expand=True)
 info_text.config(state="disabled", bg="#e0e0e0")
+
+tac_frame = ttk.Frame(bottom_notebook)
+bottom_notebook.add(tac_frame, text='TAC')
+tac_text = tk.Text(tac_frame, height=8)
+tac_text.pack(fill="both", expand=True)
+tac_text.config(state="disabled", bg="#e0e0e0")
 
 root.mainloop()

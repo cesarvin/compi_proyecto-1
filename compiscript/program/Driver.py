@@ -56,7 +56,7 @@ def compilar(code = ""):
             message = (f"{err['message']}{off}")
             handler.add_error(message, err['line'], err['column'])
 
-        return False, 'Errores lexicos', handler.to_dict(), None, None
+        return False, 'Errores lexicos', handler.to_dict(), None, None, None
 
     # primer visitor para determinar tipos y funciones
     init_visitor = InitVisitor(error_handler=handler, symbol_table=symbol_table, type_table=type_table)
@@ -65,7 +65,7 @@ def compilar(code = ""):
     init_visitor.visit(tree)
 
     if handler.has_errors():
-        return False, 'Errores Semanticos', handler.to_dict() , None, None
+        return False, 'Errores Semanticos', handler.to_dict() , None, None, None
     
     visitor = TypeCheckVisitor(error_handler=handler, symbol_table=symbol_table, type_table=type_table)
 
@@ -73,7 +73,7 @@ def compilar(code = ""):
     visitor.visit(tree)
 
     if handler.has_errors():
-        return False, 'Errores Semanticos', handler.to_dict(), None, None
+        return False, 'Errores Semanticos', handler.to_dict(), None, None, None
     
     # symbol_table.print_table()
     
@@ -88,8 +88,8 @@ def compilar(code = ""):
     
     tac_code_obj.print_code()
 
-    return True, "El código está correcto", [], symbol_table.to_dict(), type_table.to_dict()
-        
+    #return True, "El código está correcto", [], symbol_table.to_dict(), type_table.to_dict()
+    return True, "El código está correcto", [], symbol_table.to_dict(), type_table.to_dict(), tac_code_obj.to_dict()
     # except OperationalError as e:
     #     return False, e
 
