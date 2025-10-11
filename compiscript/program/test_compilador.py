@@ -14,7 +14,7 @@ class TestCompilador(unittest.TestCase):
         
         input_stream = InputStream(codigo)
 
-        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
 
         self.assertEqual(compilado, True)
 
@@ -28,7 +28,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
 
         self.assertEqual(compilado, True)
     
@@ -38,7 +38,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
 
         self.assertEqual(compilado, True)
 
@@ -49,7 +49,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
 
         self.assertEqual(compilado, False)
 
@@ -72,7 +72,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
 
         self.assertEqual(compilado, True)
 
@@ -83,7 +83,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
 
         self.assertEqual(compilado, False)
 
@@ -94,7 +94,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
 
         self.assertEqual(compilado, False)
 
@@ -105,7 +105,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
 
         self.assertEqual(compilado, False)
     
@@ -119,7 +119,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
 
         self.assertEqual(compilado, False)
 
@@ -132,7 +132,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
 
         self.assertEqual(compilado, True)
     
@@ -146,7 +146,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
 
         self.assertEqual(compilado, True)
 
@@ -162,7 +162,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
 
         self.assertEqual(compilado, True)
 
@@ -176,7 +176,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
 
         self.assertEqual(compilado, True)
 
@@ -192,7 +192,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
 
         self.assertEqual(compilado, True)
     
@@ -207,7 +207,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
 
         self.assertEqual(compilado, False)
 
@@ -227,7 +227,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
 
         self.assertEqual(compilado, True)
 
@@ -302,7 +302,7 @@ class TestCompilador(unittest.TestCase):
         '''
         input_stream = InputStream(codigo)  
 
-        compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+        compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
 
         self.assertEqual(compilado, True)
 
