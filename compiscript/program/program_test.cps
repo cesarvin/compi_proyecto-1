@@ -1,3 +1,3 @@
-let numbers: integer[] = [10, 20, 30];
-
-numbers[1] = 5;
+let a = 10;
+let b = 20;
+let c = a + b;

@@ -9,13 +9,13 @@ from recursos.error_handler import SyntaxErrorHandler, ErrorHandler
 from recursos.symbol_table import SymbolTable
 from recursos.type_table import TypeTable
 from recursos.tac_handler import TACode
-
+from recursos.mips_handller import MipsHandler
 
 def main(argv):
     
     input_stream = FileStream(argv[1], encoding="utf-8")
     
-    compilado, result , errores, symbol_table, type_table = compilar(input_stream)
+    compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
     
     if not compilado and result == 'Errores lexicos':
         print("\nSe encontraron errores de sintaxis:\n")
@@ -88,7 +88,19 @@ def compilar(code = ""):
     
     tac_code_obj.print_code()
 
-    #return True, "El código está correcto", [], symbol_table.to_dict(), type_table.to_dict()
+    
+    # --- GENERACIÓN MIPS --- 
+    print("Iniciando generación de código MIPS...")
+    
+    mips_gen = MipsHandler(tac_code_obj.instructions, symbol_table, type_table)
+    
+    mips_code = mips_gen.generar_codigo()
+    
+    print("\n" + "=" * 20 + " CÓDIGO MIPS GENERADO " + "=" * 20)
+    print(mips_code)
+    print("=" * 64 + "\n")
+
+    
     return True, "El código está correcto", [], symbol_table.to_dict(), type_table.to_dict(), tac_code_obj.to_dict()
     # except OperationalError as e:
     #     return False, e
