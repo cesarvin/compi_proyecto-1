@@ -26,7 +26,7 @@ class TypeTable:
     def __init__(self):
         self.entries = {
             "object": TypeRow(ObjectType(), 0, None),
-            "boolean": TypeRow(BoolType(), 1, "Object"),
+            "boolean": TypeRow(BoolType(), 8, "Object"),
             "integer": TypeRow(IntType(), 8, "Object"),
             "float": TypeRow(FloatType(), 8, "Object"),
             "string": TypeRow(StringType(), 8, "Object"),

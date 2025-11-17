@@ -417,28 +417,90 @@ class TACVisitor(CompiscriptVisitor):
 
         self.tac.add_quadruple(op=f'{funcion}:')
         self.tac.add_quadruple(op='BEGIN_FUNC')
+
         self.symbol_table.enter_scope()
-        
+
         if self.current_class:
             this_symbol = VariableSymbol(id='this', data_type=self.current_class, size=8, role='Parameter', offset=0)
             self.symbol_table.add(this_symbol)
             
-            metodo = f"{self.current_class}.{funcion}" if funcion != "constructor" else funcion
-            metodo_symbol = self.symbol_table.find(metodo)
+            full_method_name = f"{self.current_class}.{funcion}" if funcion != "constructor" else funcion
+            method_symbol = self.symbol_table.scopes[-2]['symbols'].get(full_method_name) 
 
-            if metodo_symbol and isinstance(metodo_symbol.data_type, FunctionType):
+            if method_symbol and isinstance(method_symbol.data_type, FunctionType):
                 param_offset_start = 8 
+                
+                param_nodes = []
+                if ctx.parameters():
+                    param_nodes = ctx.parameters().parameter()
 
-                for i, param in enumerate(metodo_symbol.parameters):
-                    param.offset = param_offset_start + (i * 8) 
-                    self.symbol_table.add(param)
+                for i, param_node in enumerate(param_nodes):
+                    param_name = param_node.Identifier().getText()
+                    param_type = method_symbol.data_type.param_types[i]
+                    type_row = self.type_table.find(str(param_type))
+                    
+                    param_symbol = VariableSymbol(
+                        id=param_name, data_type=param_type,
+                        size=type_row.size if type_row else 8, role='Parameter',
+                        offset=param_offset_start + (i * 8)
+                    )
+                    self.symbol_table.add(param_symbol)
+        else:
+            func_symbol = self.symbol_table.scopes[0]['symbols'].get(funcion)
+            
+            if func_symbol and isinstance(func_symbol.data_type, FunctionType):
+                param_offset_start = 8 
+                
+                param_nodes = []
+                if ctx.parameters():
+                    param_nodes = ctx.parameters().parameter()
 
+                for i, param_node in enumerate(param_nodes):
+                    param_name = param_node.Identifier().getText()
+                    param_type = func_symbol.data_type.param_types[i]
+                    type_row = self.type_table.find(str(param_type))
+                    
+                    param_symbol = VariableSymbol(
+                        id=param_name,
+                        data_type=param_type,
+                        size=type_row.size if type_row else 8,
+                        role='Parameter',
+                        offset=param_offset_start + (i * 8)
+                    )
+                    self.symbol_table.add(param_symbol)
+        
         self.visit(ctx.block())
         self.symbol_table.exit_scope()
 
         self.tac.add_quadruple(op='END_FUNC')
-        
         return None
+
+        # funcion = ctx.Identifier().getText()
+
+        # self.tac.add_quadruple(op=f'{funcion}:')
+        # self.tac.add_quadruple(op='BEGIN_FUNC')
+        # self.symbol_table.enter_scope()
+        
+        # if self.current_class:
+        #     this_symbol = VariableSymbol(id='this', data_type=self.current_class, size=8, role='Parameter', offset=0)
+        #     self.symbol_table.add(this_symbol)
+            
+        #     metodo = f"{self.current_class}.{funcion}" if funcion != "constructor" else funcion
+        #     metodo_symbol = self.symbol_table.find(metodo)
+
+        #     if metodo_symbol and isinstance(metodo_symbol.data_type, FunctionType):
+        #         param_offset_start = 8 
+
+        #         for i, param in enumerate(metodo_symbol.parameters):
+        #             param.offset = param_offset_start + (i * 8) 
+        #             self.symbol_table.add(param)
+
+        # self.visit(ctx.block())
+        # self.symbol_table.exit_scope()
+
+        # self.tac.add_quadruple(op='END_FUNC')
+        
+        # return None
 
 
     # Visit a parse tree produced by CompiscriptParser#parameters.
