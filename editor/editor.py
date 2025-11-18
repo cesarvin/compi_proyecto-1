@@ -82,6 +82,9 @@ def compile():
 
         tac_text.config(state="normal")
         tac_text.delete("1.0", tk.END)
+
+        mips_text.config(state="normal") 
+        mips_text.delete("1.0", tk.END)
         
         compilation_success = result.get('compilado', False)
         message = result.get('result', 'No hay resultados')
@@ -89,6 +92,7 @@ def compile():
         symbol_table = result.get('symbol_table', [])
         type_table = result.get('type_table', {})
         tac_code = result.get('tac_code', [])
+        mips_code = result.get('mips_code', "")
 
         output_text.insert(tk.END, f"Resultado del analisis: {message}\n")
         output_text.insert(tk.END, ("-" * 50) + "\n\n")
@@ -166,6 +170,10 @@ def compile():
                 
                 tab_to_select = tac_frame
 
+            if mips_code:
+                mips_text.insert(tk.END, mips_code)
+                tab_to_select = mips_frame # Seleccionar automáticamente la pestaña MIPS
+
     except requests.exceptions.RequestException as e:
         messagebox.showerror("Error de Conexión", f"No se pudo conectar al servidor.\n\nError: {e}")
     except Exception as e:
@@ -193,6 +201,10 @@ def clear():
     tac_text.config(state="normal")
     tac_text.delete("1.0", tk.END)
     tac_text.config(state="disabled")
+
+    mips_text.config(state="normal")
+    mips_text.delete("1.0", tk.END)
+    mips_text.config(state="disabled")
 
 def open_file():
     filepath = filedialog.askopenfilename(
@@ -251,5 +263,11 @@ bottom_notebook.add(tac_frame, text='TAC')
 tac_text = tk.Text(tac_frame, height=8)
 tac_text.pack(fill="both", expand=True)
 tac_text.config(state="disabled", bg="#e0e0e0")
+
+mips_frame = ttk.Frame(bottom_notebook)
+bottom_notebook.add(mips_frame, text='MIPS')
+mips_text = tk.Text(mips_frame, height=8)
+mips_text.pack(fill="both", expand=True)
+mips_text.config(state="disabled", bg="#e0e0e0")
 
 root.mainloop()

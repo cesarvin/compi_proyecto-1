@@ -22,7 +22,7 @@ def compilador():
         codetext = data['code']
         
         input_stream = InputStream(codetext)
-        compilado, result, errores, symbol_table, type_table, tac_code = compilar(input_stream)
+        compilado, result, errores, symbol_table, type_table, tac_code, mips_code = compilar(input_stream)
 
         response_data = {
             'compilado': compilado,
@@ -30,7 +30,8 @@ def compilador():
             'errors': errores,
             'symbol_table': symbol_table,
             'type_table': type_table,
-            'tac_code': tac_code
+            'tac_code': tac_code, 
+            'mips_code': mips_code
         }
 
         return jsonify(response_data), 200

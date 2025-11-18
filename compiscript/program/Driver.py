@@ -15,7 +15,7 @@ def main(argv):
     
     input_stream = FileStream(argv[1], encoding="utf-8")
     
-    compilado, result , errores, symbol_table, type_table, tac_code = compilar(input_stream)
+    compilado, result , errores, symbol_table, type_table, tac_code, mips_code = compilar(input_stream)
     
     if not compilado and result == 'Errores lexicos':
         print("\nSe encontraron errores de sintaxis:\n")
@@ -101,7 +101,7 @@ def compilar(code = ""):
     print("=" * 64 + "\n")
 
     
-    return True, "El código está correcto", [], symbol_table.to_dict(), type_table.to_dict(), tac_code_obj.to_dict()
+    return True, "El código está correcto", [], symbol_table.to_dict(), type_table.to_dict(), tac_code_obj.to_dict(), mips_code
     # except OperationalError as e:
     #     return False, e
 

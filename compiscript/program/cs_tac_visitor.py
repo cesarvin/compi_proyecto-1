@@ -152,10 +152,21 @@ class TACVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#printStatement.
     def visitPrintStatement(self, ctx:CompiscriptParser.PrintStatementContext):
-        ctx_expression = self.visit(ctx.expression())
-        self.tac.add_quadruple('PARAM', arg1=ctx_expression)
+        expr_addr = self.visit(ctx.expression())
+        
+        expr_type = self.get_type_addr(expr_addr, ctx.expression())
+        
+        type_hint = 'string' if isinstance(expr_type, StringType) else 'int'
+        
+        self.tac.add_quadruple('PARAM', arg1=expr_addr, arg2=type_hint)
+        
         self.tac.add_quadruple('CALL', arg1='print', arg2='1')
         return None
+        
+        # ctx_expression = self.visit(ctx.expression())
+        # self.tac.add_quadruple('PARAM', arg1=ctx_expression)
+        # self.tac.add_quadruple('CALL', arg1='print', arg2='1')
+        # return None
 
 
     # Visit a parse tree produced by CompiscriptParser#ifStatement.
@@ -413,95 +424,54 @@ class TACVisitor(CompiscriptVisitor):
 
     # Visit a parse tree produced by CompiscriptParser#functionDeclaration.
     def visitFunctionDeclaration(self, ctx:CompiscriptParser.FunctionDeclarationContext):
-        funcion = ctx.Identifier().getText()
+        func_name = ctx.Identifier().getText()
+        
+        real_func_name = func_name
+        if self.current_class and func_name != "constructor":
+            real_func_name = f"{self.current_class}.{func_name}"
 
-        self.tac.add_quadruple(op=f'{funcion}:')
+        func_symbol = self.symbol_table.find(real_func_name)
+
+        self.tac.add_quadruple(op=f'{real_func_name}:')
         self.tac.add_quadruple(op='BEGIN_FUNC')
 
         self.symbol_table.enter_scope()
 
         if self.current_class:
-            this_symbol = VariableSymbol(id='this', data_type=self.current_class, size=8, role='Parameter', offset=0)
+            this_symbol = VariableSymbol(id='this', data_type=self.current_class, size=8, role='Parameter', offset=8)
             self.symbol_table.add(this_symbol)
-            
-            full_method_name = f"{self.current_class}.{funcion}" if funcion != "constructor" else funcion
-            method_symbol = self.symbol_table.scopes[-2]['symbols'].get(full_method_name) 
-
-            if method_symbol and isinstance(method_symbol.data_type, FunctionType):
-                param_offset_start = 8 
-                
-                param_nodes = []
-                if ctx.parameters():
-                    param_nodes = ctx.parameters().parameter()
-
-                for i, param_node in enumerate(param_nodes):
-                    param_name = param_node.Identifier().getText()
-                    param_type = method_symbol.data_type.param_types[i]
-                    type_row = self.type_table.find(str(param_type))
-                    
-                    param_symbol = VariableSymbol(
-                        id=param_name, data_type=param_type,
-                        size=type_row.size if type_row else 8, role='Parameter',
-                        offset=param_offset_start + (i * 8)
-                    )
-                    self.symbol_table.add(param_symbol)
+            param_offset_start = 16 
         else:
-            func_symbol = self.symbol_table.scopes[0]['symbols'].get(funcion)
-            
-            if func_symbol and isinstance(func_symbol.data_type, FunctionType):
-                param_offset_start = 8 
-                
-                param_nodes = []
-                if ctx.parameters():
-                    param_nodes = ctx.parameters().parameter()
+            param_offset_start = 8
 
-                for i, param_node in enumerate(param_nodes):
-                    param_name = param_node.Identifier().getText()
-                    param_type = func_symbol.data_type.param_types[i]
-                    type_row = self.type_table.find(str(param_type))
-                    
-                    param_symbol = VariableSymbol(
-                        id=param_name,
-                        data_type=param_type,
-                        size=type_row.size if type_row else 8,
-                        role='Parameter',
-                        offset=param_offset_start + (i * 8)
-                    )
-                    self.symbol_table.add(param_symbol)
-        
+        if ctx.parameters():
+            for i, param_ctx in enumerate(ctx.parameters().parameter()):
+                param_name = param_ctx.Identifier().getText()
+                
+                param_type = None
+                if func_symbol and isinstance(func_symbol.data_type, FunctionType):
+                     if i < len(func_symbol.data_type.param_types):
+                        param_type = func_symbol.data_type.param_types[i]
+                
+                current_offset = param_offset_start + (i * 8)
+
+                param_symbol = VariableSymbol(
+                    id=param_name, 
+                    data_type=param_type, 
+                    size=8, 
+                    role='Parameter', 
+                    offset=current_offset 
+                )
+                
+                self.symbol_table.add(param_symbol)
+
         self.visit(ctx.block())
         self.symbol_table.exit_scope()
 
         self.tac.add_quadruple(op='END_FUNC')
         return None
 
-        # funcion = ctx.Identifier().getText()
-
-        # self.tac.add_quadruple(op=f'{funcion}:')
-        # self.tac.add_quadruple(op='BEGIN_FUNC')
-        # self.symbol_table.enter_scope()
         
-        # if self.current_class:
-        #     this_symbol = VariableSymbol(id='this', data_type=self.current_class, size=8, role='Parameter', offset=0)
-        #     self.symbol_table.add(this_symbol)
-            
-        #     metodo = f"{self.current_class}.{funcion}" if funcion != "constructor" else funcion
-        #     metodo_symbol = self.symbol_table.find(metodo)
-
-        #     if metodo_symbol and isinstance(metodo_symbol.data_type, FunctionType):
-        #         param_offset_start = 8 
-
-        #         for i, param in enumerate(metodo_symbol.parameters):
-        #             param.offset = param_offset_start + (i * 8) 
-        #             self.symbol_table.add(param)
-
-        # self.visit(ctx.block())
-        # self.symbol_table.exit_scope()
-
-        # self.tac.add_quadruple(op='END_FUNC')
-        
-        # return None
-
 
     # Visit a parse tree produced by CompiscriptParser#parameters.
     def visitParameters(self, ctx:CompiscriptParser.ParametersContext):
@@ -659,33 +629,71 @@ class TACVisitor(CompiscriptVisitor):
     # Visit a parse tree produced by CompiscriptParser#additiveExpr.
     def visitAdditiveExpr(self, ctx:CompiscriptParser.AdditiveExprContext):
         
-        if len(ctx.multiplicativeExpr()) == 1:
-            return self.visit(ctx.multiplicativeExpr(0))
+        operands = ctx.multiplicativeExpr()
+        
+        if len(operands) == 1:
+            return self.visit(operands[0])
+
+        left_addr = self.visit(operands[0])
+
+        for i in range(1, len(operands)):
+            right_addr = self.visit(operands[i])
+            
+            op = ctx.getChild(2 * i - 1).getText()
+            
+            result_addr = self.tac.add_temp()
+            
+            self.tac.add_quadruple(op, left_addr, right_addr, result_addr)
+            
+            left_addr = result_addr
+
+        return left_addr
+
+        # if len(ctx.multiplicativeExpr()) == 1:
+        #     return self.visit(ctx.multiplicativeExpr(0))
 
         
-        left_addr = self.visit(ctx.multiplicativeExpr(0))
-        right_addr = self.visit(ctx.multiplicativeExpr(1))
-        result_addr = self.tac.add_temp() 
-        op = ctx.getChild(1).getText()
+        # left_addr = self.visit(ctx.multiplicativeExpr(0))
+        # right_addr = self.visit(ctx.multiplicativeExpr(1))
+        # result_addr = self.tac.add_temp() 
+        # op = ctx.getChild(1).getText()
         
-        self.tac.add_quadruple(op, left_addr, right_addr, result_addr)
+        # self.tac.add_quadruple(op, left_addr, right_addr, result_addr)
 
-        return result_addr
+        # return result_addr
 
 
     # Visit a parse tree produced by CompiscriptParser#multiplicativeExpr.
     def visitMultiplicativeExpr(self, ctx:CompiscriptParser.MultiplicativeExprContext):
         
-        if len(ctx.unaryExpr()) == 1:
-            return self.visit(ctx.unaryExpr(0))
+        operands = ctx.unaryExpr()
         
-        left_addr = self.visit(ctx.unaryExpr(0))
-        right_addr = self.visit(ctx.unaryExpr(1))
-        result_addr = self.tac.add_temp()
-        op = ctx.getChild(1).getText()
-        self.tac.add_quadruple(op, left_addr, right_addr, result_addr)
+        if len(operands) == 1:
+            return self.visit(operands[0])
         
-        return result_addr
+        left_addr = self.visit(operands[0])
+
+        for i in range(1, len(operands)):
+            right_addr = self.visit(operands[i])
+            op = ctx.getChild(2 * i - 1).getText()
+            
+            result_addr = self.tac.add_temp()
+            self.tac.add_quadruple(op, left_addr, right_addr, result_addr)
+            
+            left_addr = result_addr
+            
+        return left_addr
+
+        # if len(ctx.unaryExpr()) == 1:
+        #     return self.visit(ctx.unaryExpr(0))
+        
+        # left_addr = self.visit(ctx.unaryExpr(0))
+        # right_addr = self.visit(ctx.unaryExpr(1))
+        # result_addr = self.tac.add_temp()
+        # op = ctx.getChild(1).getText()
+        # self.tac.add_quadruple(op, left_addr, right_addr, result_addr)
+        
+        # return result_addr
 
 
     # Visit a parse tree produced by CompiscriptParser#unaryExpr.
@@ -772,6 +780,12 @@ class TACVisitor(CompiscriptVisitor):
                         else:
                             prop_type = prop_info['type']
                             prop_offset = prop_info['offset']
+
+                            if current_addr.startswith('['):
+                                temp_ref = self.tac.add_temp()
+                                self.tac.add_quadruple('=', current_addr, None, temp_ref)
+                                current_addr = temp_ref
+
                             prop_addr = f"[{current_addr}+{prop_offset}]"
                             
                             if load_value:
